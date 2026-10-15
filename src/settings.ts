@@ -47,12 +47,55 @@ class FolderSuggest extends AbstractInputSuggest<TFolder> {
 	}
 }
 
+const SOURCE_NAMES: Record<string, string> = { lookup: "Right-click lookup" };
+const sourceName = (source: string) => SOURCE_NAMES[source] ?? CHECK_INFO[source as CheckKind]?.name ?? source;
+
 export class ProsePrinceSettingTab extends PluginSettingTab {
 	constructor(
 		app: App,
 		private readonly plugin: ProsePrincePlugin,
 	) {
 		super(app, plugin);
+	}
+
+	/** "Your lookups": what this vault's writer looks up and what they choose instead. */
+	private lookupStats(containerEl: HTMLElement): void {
+		const history = this.plugin.lookupHistory;
+		const box = containerEl.createDiv({ cls: "pp-stats" });
+		box.createDiv({ cls: "pp-stats-title", text: "Your lookups" });
+		const { lookups, words, picks } = history.totals();
+		if (lookups === 0 && picks === 0) {
+			box.createDiv({ cls: "pp-stats-empty", text: "Nothing yet. Words you look up and replace will show here." });
+			return;
+		}
+		const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+		box.createDiv({ cls: "pp-stats-summary", text: `${plural(lookups, "lookup")} of ${plural(words, "word")} · ${plural(picks, "replacement")}` });
+
+		const top = history.topLookups(12);
+		if (top.length) {
+			box.createDiv({ cls: "pp-stats-label", text: "Looked up most" });
+			const row = box.createDiv({ cls: "pp-stats-words" });
+			for (const { word, n } of top) row.createSpan({ cls: "pp-stats-word", text: n > 1 ? `${word} ×${n}` : word });
+		}
+
+		const replaced = history.topReplaced(10);
+		if (replaced.length) {
+			box.createDiv({ cls: "pp-stats-label", text: "Replaced most, and what you chose" });
+			const list = box.createEl("ul", { cls: "pp-stats-list" });
+			for (const { word, n, chosen } of replaced) {
+				const li = list.createEl("li");
+				li.createSpan({ cls: "pp-stats-from", text: word });
+				li.appendText(" → ");
+				li.createSpan({ cls: "pp-stats-to", text: chosen.slice(0, 4).join(", ") + (chosen.length > 4 ? "…" : "") });
+				if (n > 1) li.createSpan({ cls: "pp-stats-count", text: ` ×${n}` });
+			}
+		}
+
+		const bySource = Object.entries(history.picksBySource()).sort((a, b) => b[1] - a[1]);
+		if (bySource.length) {
+			box.createDiv({ cls: "pp-stats-label", text: "Replacements by where they came from" });
+			box.createDiv({ cls: "pp-stats-sources", text: bySource.map(([source, n]) => `${sourceName(source)} ${n}`).join(" · ") });
+		}
 	}
 
 	display(): void {
@@ -293,6 +336,74 @@ export class ProsePrinceSettingTab extends PluginSettingTab {
 					s.guidance = v as "collapsed" | "hidden";
 					await save();
 				}));
+
+		// ── Word lookups (online) ──────────────────────────────────────────────
+		new Setting(containerEl).setName("Word lookups (online)").setHeading();
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: "Off unless you switch it on. Right-click a word for its meaning, synonyms and more specific words from Datamuse (the engine behind OneLook), and hover cards offer single words to try; pick one to replace the original. Only the word is sent, never your text. Answers are saved in this vault for six months, so a repeat lookup stays offline. Everything else in ProsePrince works without a connection.",
+		});
+		const lookup = s.lookup;
+		new Setting(containerEl)
+			.setName("Use online word lookups")
+			.addToggle((t) => t.setValue(lookup.enabled).onChange(async (v) => {
+				lookup.enabled = v;
+				await save(true);
+			}));
+		if (lookup.enabled) {
+			new Setting(containerEl)
+				.setName("Datamuse API key")
+				.setDesc("Not needed until 1 February 2027, when Datamuse starts requiring one. Request a key through the feedback form on datamuse.com/api.")
+				.addText((t) => {
+					t.inputEl.type = "password";
+					t.setPlaceholder("Optional").setValue(lookup.apiKey).onChange(async (v) => {
+						lookup.apiKey = v.trim();
+						await save();
+					});
+				});
+			new Setting(containerEl)
+				.setName("Words to try in hover cards")
+				.setDesc("Adverbs, qualifiers, nominalisations and echoes get a row of single words to try (\"walked slowly\" → strolled), with a short craft reminder; stacked modifiers and metaphor candidates show whether the pairing is a usual one (\"dead silence\"). Looked up only once a card has stayed open a moment.")
+				.addToggle((t) => t.setValue(lookup.hoverCards).onChange(async (v) => {
+					lookup.hoverCards = v;
+					await save();
+				}));
+			new Setting(containerEl)
+				.setName("Right-click lookup")
+				.setDesc("Adds ProsePrince: look up \"word\" to the editor menu. The \"Look up word at cursor\" command works either way.")
+				.addToggle((t) => t.setValue(lookup.rightClick).onChange(async (v) => {
+					lookup.rightClick = v;
+					await save();
+				}));
+			new Setting(containerEl)
+				.setName("Hide rare words")
+				.setDesc("Leave out suggestions few readers will know (perambulate). When shown, they are marked with a dotted underline.")
+				.addToggle((t) => t.setValue(lookup.hideRare).onChange(async (v) => {
+					lookup.hideRare = v;
+					await save();
+				}));
+			const lookups = this.plugin.lookups;
+			new Setting(containerEl)
+				.setName("Saved answers")
+				.setDesc(`${lookups.size} saved · ${lookups.requestsToday()} request${lookups.requestsToday() === 1 ? "" : "s"} to Datamuse today`)
+				.addButton((b) => b.setButtonText("Clear").setDisabled(lookups.size === 0).onClick(() => {
+					lookups.clear();
+					this.display();
+				}));
+			const history = this.plugin.lookupHistory;
+			new Setting(containerEl)
+				.setName("Keep lookup history")
+				.setDesc("Records which words you look up and what you replace them with, in this vault only. It never appears in the popover.")
+				.addToggle((t) => t.setValue(lookup.history).onChange(async (v) => {
+					lookup.history = v;
+					await save();
+				}))
+				.addButton((b) => b.setButtonText("Clear history").setDisabled(history.isEmpty).onClick(() => {
+					history.clear();
+					this.display();
+				}));
+			this.lookupStats(containerEl);
+		}
 
 		// ── Advanced ───────────────────────────────────────────────────────────
 		new Setting(containerEl).setName("Advanced").setHeading();

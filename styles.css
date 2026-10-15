@@ -210,3 +210,80 @@ body.theme-dark {
 .pp-setting-check-dialoguePunct .setting-item-name { background: var(--pp-dialogue-punct); }
 .pp-setting-check-cliche .setting-item-name,
 [class*="pp-setting-check-"] .setting-item-name { display: inline-block; padding: 0 4px; border-radius: 3px; }
+
+/* Right-click lookup popover (online word lookups). */
+.pp-lookup {
+	position: fixed;
+	z-index: var(--layer-popover, 30);
+	width: min(360px, calc(100vw - 16px));
+	max-height: min(420px, calc(100vh - 16px));
+	overflow-y: auto;
+	padding: 8px 10px;
+	background: var(--background-primary, #fff);
+	color: var(--text-normal, inherit);
+	border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.3));
+	border-radius: var(--radius-m, 8px);
+	box-shadow: var(--shadow-s, 0 4px 14px rgba(0, 0, 0, 0.15));
+	font-family: var(--font-interface, system-ui, sans-serif);
+	font-size: var(--font-ui-small, 13px);
+	line-height: 1.4;
+}
+.pp-lookup:focus { outline: none; }
+.pp-lookup-header { display: flex; align-items: baseline; gap: 8px; }
+.pp-lookup-word { font-weight: 600; font-size: 1.1em; }
+.pp-lookup-meta, .pp-lookup-status { color: var(--text-muted, inherit); }
+.pp-lookup-status { margin-top: 6px; }
+.pp-lookup-section { margin-top: 8px; }
+.pp-lookup-label { color: var(--text-muted, inherit); font-size: 0.9em; margin-bottom: 3px; }
+.pp-lookup-defs { margin: 0; padding-left: 1.3em; }
+.pp-lookup-defs li { margin: 2px 0; }
+.pp-lookup-defpos { color: var(--text-faint, inherit); font-style: italic; }
+.pp-lookup .pp-lookup-more {
+	margin-top: 4px;
+	padding: 1px 8px;
+	font-size: inherit;
+	border-radius: var(--radius-s, 4px);
+	cursor: pointer;
+}
+.pp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pp-chip {
+	padding: 1px 8px;
+	font-size: inherit;
+	border-radius: var(--radius-s, 4px);
+	cursor: pointer;
+}
+.pp-chip:focus-visible { outline: 2px solid var(--interactive-accent, #6a8dff); outline-offset: 1px; }
+.pp-chip-rare { text-decoration: underline dotted; text-underline-offset: 3px; color: var(--text-muted, inherit); }
+.pp-lookup-footer {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 10px;
+	padding-top: 6px;
+	border-top: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.3));
+	color: var(--text-faint, inherit);
+	font-size: 0.85em;
+}
+
+/* "Words to try" row in a hover card. */
+.pp-suggest .pp-lookup-section { margin-top: 6px; }
+.pp-suggest-reminder { margin-top: 4px; color: var(--text-muted, inherit); font-size: 0.9em; font-style: italic; }
+.pp-suggest-status:empty { display: none; }
+.pp-suggest-status { margin-top: 4px; color: var(--text-muted, inherit); font-size: 0.9em; }
+
+/* Settings: "Your lookups". */
+.pp-stats { margin: 4px 0 16px; padding: 10px 12px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m, 8px); }
+.pp-stats-title { font-weight: 600; }
+.pp-stats-summary, .pp-stats-empty, .pp-stats-sources { color: var(--text-muted); font-size: var(--font-ui-small); margin-top: 2px; }
+.pp-stats-label { margin-top: 10px; color: var(--text-muted); font-size: var(--font-ui-smaller, 12px); text-transform: uppercase; letter-spacing: 0.04em; }
+.pp-stats-words { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pp-stats-word { padding: 1px 8px; border-radius: var(--radius-s, 4px); background: var(--background-modifier-hover); font-size: var(--font-ui-small); }
+.pp-stats-list { margin: 4px 0 0; padding-left: 1.2em; font-size: var(--font-ui-small); }
+.pp-stats-from { color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
+.pp-stats-to { font-style: italic; }
+.pp-stats-count { color: var(--text-faint); }
+.pp-pairings { display: flex; flex-wrap: wrap; gap: 3px 4px; }
+.pp-pairing { padding: 0 6px; border-radius: var(--radius-s, 4px); background: var(--background-modifier-hover, rgba(127, 127, 127, 0.12)); color: var(--text-muted, inherit); }
+.pp-pairing-yours { color: var(--text-normal, inherit); font-weight: 600; outline: 1px solid var(--text-accent, currentColor); }
+.pp-lookup-sound > summary { cursor: pointer; }
+.pp-lookup-sound .pp-lookup-section { margin-top: 4px; }

@@ -21,6 +21,11 @@ export function concreteness(word: string): number | null {
 	return null;
 }
 
+/** Whether the word is one of the 40k generally known lemmas in the norms. */
+export function isKnownLemma(word: string): boolean {
+	return load().has(word.toLowerCase());
+}
+
 /** The word itself, then cheap de-inflections in order of likelihood. */
 function lemmaCandidates(w: string): string[] {
 	const out = [w];

@@ -1,14 +1,18 @@
 /// <reference lib="webworker" />
 import { analyzeParagraph } from "../analysis/analyze";
-import type { AnalyzeRequest, AnalyzeResponse } from "./protocol";
+import { wordInfoAt } from "../analysis/wordInfo";
+import type { WorkerRequest, WorkerResponse } from "./protocol";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
-scope.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
-	const { id, paragraphs, echoWindow } = event.data;
-	let response: AnalyzeResponse;
+scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
+	const request = event.data;
+	const { id } = request;
+	let response: WorkerResponse;
 	try {
-		response = { id, results: paragraphs.map((p) => analyzeParagraph(p.text, echoWindow, p.names)) };
+		response = request.type === "word"
+			? { id, word: wordInfoAt(request.text, request.from, request.to, request.names) }
+			: { id, results: request.paragraphs.map((p) => analyzeParagraph(p.text, request.echoWindow, p.names)) };
 	} catch (error) {
 		response = { id, error: error instanceof Error ? error.message : String(error) };
 	}

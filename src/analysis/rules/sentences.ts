@@ -1,7 +1,7 @@
 // Rule designs adapted from Creative Writer's RepetitionRule (openers), WeakVerbRule and
 // NominalizationRule (MIT), retargeted to wink-nlp tags.
 import type { Highlight, Token } from "../types";
-import { bySentence, lower } from "./common";
+import { bySentence, headOf, lower } from "./common";
 
 /** Openers so ordinary that a run of three is unremarkable; these need a longer run. */
 const COMMON_OPENERS = new Set(["the", "a", "an", "i", "it", "there"]);
@@ -103,7 +103,16 @@ export function nominalizations(words: Token[]): Highlight[] {
 		const [n, j] = hit;
 		const verb = KNOWN[n.lemma] ?? KNOWN[lower(n)];
 		const note = verb ? `Nominalisation. "${v.text} … ${n.text}" → "${verb}".` : `Nominalisation. The action is hiding in "${n.text}"; is there a verb for it?`;
-		out.push({ from: v.from, to: words[j]!.to, kind: { check: "nominalization" }, note });
+		// "made use of", "took note of": a single verb would leave the "of" stranded.
+		const after = words[j + 1];
+		const stranded = after !== undefined && after.sentence === v.sentence && lower(after) === "of";
+		out.push({
+			from: v.from,
+			to: words[j]!.to,
+			kind: { check: "nominalization" },
+			note,
+			...(stranded ? {} : { lookup: { mode: "phrase" as const, query: `${v.lemma} ${n.lemma}`, head: headOf(words, i), replace: { from: v.from, to: words[j]!.to } } }),
+		});
 	}
 	return out;
 }

@@ -31,6 +31,21 @@ export interface ProsePrinceSettings {
 	characterFolder: string;
 	/** Folders where ProsePrince runs. Empty means every note. Frontmatter `proseprince: true|false` wins. */
 	folders: string[];
+	/** Optional online word lookups (Datamuse). Off unless the writer switches them on. */
+	lookup: LookupSettings;
+}
+
+export interface LookupSettings {
+	enabled: boolean;
+	/** Datamuse requires a key from 1 February 2027. */
+	apiKey: string;
+	/** "Words to try" in hover cards for adverbs, qualifiers, nominalisations and echoes. */
+	hoverCards: boolean;
+	/** Right-click "Look up" and its command. */
+	rightClick: boolean;
+	hideRare: boolean;
+	/** Keep a per-vault record of lookups and replacements, shown on the settings page. */
+	history: boolean;
 }
 
 /** What is actually highlighted: the union of the active lenses, then the overrides. */
@@ -227,6 +242,7 @@ function defaults(): ProsePrinceSettings {
 		worldNote: WORLD_NOTE_DEFAULT,
 		characterFolder: "",
 		folders: [],
+		lookup: { enabled: false, apiKey: "", hoverCards: true, rightClick: true, hideRare: false, history: true },
 	};
 }
 
