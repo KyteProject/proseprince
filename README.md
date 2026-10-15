@@ -1,5 +1,7 @@
 # ProsePrince
 
+## Warning: This is a 100% LLM generated tool for personal use
+
 Fiction-focused prose highlighting for Obsidian, entirely offline: no server, no network calls.
 
 It is meant to sit **after** a grammar checker. Let [Harper](https://writewithharper.com/docs/integrations/obsidian) (offline) or a self-hosted LanguageTool handle spelling and grammar with underlines; ProsePrince uses text colour and background tints so the two layers don't clash. (Harper's own filler, hedge and "boring word" lints cover a handful of words; ProsePrince's lists are far larger and tuned for fiction.)
