@@ -32,6 +32,11 @@ export default class ProsePrincePlugin extends Plugin {
 	private lensItem: HTMLElement | null = null;
 	private readabilityItem: HTMLElement | null = null;
 	private readability = new WeakMap<EditorView, ReadabilityState>();
+	/** Last known on/off state per note, so saves that don't change it don't trigger a refresh. */
+	private activeState = new Map<string, boolean>();
+	/** What the status-bar items currently show, so unchanged content isn't redrawn. */
+	private lensShown = "";
+	private readabilityShown = "";
 	world = new WorldIndex(this.app, () => this.settings);
 	private rebuildWorld = debounce(async () => {
 		if (await this.world.rebuild()) this.refreshEditors();
@@ -56,9 +61,13 @@ export default class ProsePrincePlugin extends Plugin {
 			this.renderReadability();
 		}));
 		this.registerEvent(this.app.workspace.on("file-open", () => this.renderLens()));
-		// A note's own `proseprince:` flag can switch it on or off: re-check when frontmatter changes.
+		// A note's own `proseprince:` flag can switch it on or off. Metadata changes on every save,
+		// so only refresh when the on/off state actually flips.
 		this.registerEvent(this.app.metadataCache.on("changed", (file) => {
-			if (file === this.app.workspace.getActiveFile()) {
+			const now = this.isActiveFile(file);
+			const before = this.activeState.get(file.path);
+			this.activeState.set(file.path, now);
+			if (before !== undefined && before !== now) {
 				this.refreshEditors();
 				this.renderLens();
 			}
@@ -153,7 +162,9 @@ export default class ProsePrincePlugin extends Plugin {
 
 	isActiveFile(file: TFile): boolean {
 		const flag = this.app.metadataCache.getFileCache(file)?.frontmatter?.proseprince;
-		return inScope(file.path, this.settings.folders, typeof flag === "boolean" ? flag : undefined);
+		const active = inScope(file.path, this.settings.folders, typeof flag === "boolean" ? flag : undefined);
+		this.activeState.set(file.path, active);
+		return active;
 	}
 
 	/** Flip this note's frontmatter flag to the opposite of its current state. */
@@ -282,6 +293,11 @@ export default class ProsePrincePlugin extends Plugin {
 	private renderLens(): void {
 		const item = this.lensItem;
 		if (!item) return;
+		const file = this.app.workspace.getActiveFile();
+		const inactive = file !== null && file.extension === "md" && !this.isActiveFile(file);
+		const key = JSON.stringify([this.settings.enabled, activeLenses(this.settings).map((l) => l.id), overrideCount(this.settings), inactive]);
+		if (key === this.lensShown) return;
+		this.lensShown = key;
 		item.empty();
 		const icon = (name: string) => setIcon(item.createSpan({ cls: "pp-status-icon" }), name);
 		if (!this.settings.enabled) {
@@ -294,8 +310,6 @@ export default class ProsePrincePlugin extends Plugin {
 		for (const lens of lenses) icon(lens.icon);
 		if (overrideCount(this.settings) > 0) item.createSpan({ cls: "pp-status-dot", text: "•" });
 		// Outside the prose folders the icons dim, so it's clear why nothing is highlighted.
-		const file = this.app.workspace.getActiveFile();
-		const inactive = file !== null && file.extension === "md" && !this.isActiveFile(file);
 		item.toggleClass("pp-status-inactive", inactive);
 		item.setAttribute("aria-label", `ProsePrince: ${lensLabel(this.settings)}.${inactive ? " Not active in this note (outside your prose folders)." : ""} Click to switch lenses.`);
 		item.setAttribute("data-tooltip-position", "top");
@@ -317,6 +331,9 @@ export default class ProsePrincePlugin extends Plugin {
 		const view = this.activeEditorView();
 		const state = view ? this.readability.get(view) : undefined;
 		const main = state?.paragraph ?? state?.note ?? null;
+		const key = JSON.stringify([this.settings.enabled && this.settings.readabilityStatus, main?.readingEase?.band.label, main?.variety?.band.label, describe("p", state?.paragraph ?? null), describe("n", state?.note ?? null)]);
+		if (key === this.readabilityShown) return;
+		this.readabilityShown = key;
 		if (!this.settings.enabled || !this.settings.readabilityStatus || !main?.readingEase) {
 			item.setText("");
 			item.removeAttribute("aria-label");

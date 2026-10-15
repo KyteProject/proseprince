@@ -64,6 +64,18 @@ const NOTE_PASS_DELAY = 1500;
 const NOTE_PASS_BATCH = 200;
 const SUPPRESS = /%%\s*not\s+([a-z-]+)\s*%%/gi;
 
+/** Set `localStorage["proseprince-debug"] = "1"` in the developer console to log why highlighting re-runs. */
+function debug(...args: unknown[]): void {
+	try {
+		if (window.localStorage.getItem("proseprince-debug")) console.debug("[ProsePrince]", ...args);
+	} catch {
+		// storage unavailable: no logging
+	}
+}
+
+/** Edits the writer made; anything else (Sync pulling a newer version, a plugin rewriting the note) re-highlights at once. */
+const isTyping = (u: ViewUpdate) => u.transactions.some((tr) => tr.isUserEvent("input") || tr.isUserEvent("delete") || tr.isUserEvent("undo") || tr.isUserEvent("redo") || tr.isUserEvent("move"));
+
 const marks = new Map<string, Decoration>();
 function mark(className: string): Decoration {
 	let m = marks.get(className);
@@ -128,6 +140,8 @@ export class HighlightRunner {
 	private findings: Finding[] = [];
 	private noteReport: ReadabilityReport | null = null;
 	private noteReportDoc: Text | null = null;
+	/** What is currently drawn, so an identical result is not dispatched again. */
+	private drawn = "";
 
 	constructor(
 		private readonly view: EditorView,
@@ -138,8 +152,12 @@ export class HighlightRunner {
 
 	update(update: ViewUpdate): void {
 		if (update.docChanged) {
-			this.suppressCursorWord = typedInsideWord(update);
-			this.schedule(this.host.settings.debounceMs);
+			// Highlights were mapped through the edit, so what's on screen no longer matches `drawn`.
+			this.drawn = "\u0000stale";
+			const typing = isTyping(update);
+			this.suppressCursorWord = typing && typedInsideWord(update);
+			debug(typing ? "typing" : "document replaced without typing (e.g. Sync)", "→ re-highlight");
+			this.schedule(typing ? this.host.settings.debounceMs : 0);
 			if (this.suppressCursorWord) this.scheduleCursorWord();
 		} else if (update.viewportChanged) {
 			this.schedule(50);
@@ -149,10 +167,12 @@ export class HighlightRunner {
 		}
 	}
 
-	/** Re-apply after a settings change; cached analysis makes this instant. */
+	/**
+	 * Re-apply after a settings or scope change; cached analysis makes this instant. It keeps the
+	 * word-being-typed suppression and the note readability, so a refresh mid-typing changes nothing visible.
+	 */
 	refresh(): void {
-		this.suppressCursorWord = false;
-		this.noteReportDoc = null;
+		debug("refresh requested");
 		this.schedule(0);
 	}
 
@@ -212,7 +232,7 @@ export class HighlightRunner {
 		if (!settings.enabled || !anythingEnabled(active, settings) || !host.isActive(view)) {
 			view.dom.classList.remove("pp-ooze");
 			this.findings = [];
-			this.apply(Decoration.none);
+			this.apply(Decoration.none, "");
 			host.reportReadability(view, { paragraph: null, note: null });
 			return;
 		}
@@ -244,6 +264,7 @@ export class HighlightRunner {
 
 		const options = { pos: active.pos, checks: active.checks, echoWindow: settings.echoWindow };
 		const ranges: DecorationRange<Decoration>[] = [];
+		const signature: string[] = [];
 		const findings: Finding[] = [];
 		for (const p of paragraphs) {
 			const result = host.cache.get(this.keyOf(p));
@@ -251,7 +272,9 @@ export class HighlightRunner {
 			const end = p.from + p.text.length;
 			if (active.rhythm && (settings.rhythm.scope === "visible" || p === cursorParagraph)) {
 				for (const s of result.sentences) {
-					ranges.push(mark(`pp-rhythm pp-rhythm-${rhythmTier(s.effectiveLength, settings.rhythm.tiers)}`).range(p.from + s.from, p.from + s.to));
+					const cls = `pp-rhythm pp-rhythm-${rhythmTier(s.effectiveLength, settings.rhythm.tiers)}`;
+					ranges.push(mark(cls).range(p.from + s.from, p.from + s.to));
+					signature.push(`${p.from + s.from}:${p.from + s.to}:${cls}`);
 				}
 			}
 			const suppressed = suppressedIn(p.text);
@@ -263,11 +286,12 @@ export class HighlightRunner {
 				const to = p.from + h.to;
 				if (from < wordTo && to > wordFrom) continue;
 				ranges.push(mark(classFor(h)).range(from, to));
+				signature.push(`${from}:${to}:${classFor(h)}`);
 				findings.push({ from, to, highlight: h, paragraphEnd: end });
 			}
 		}
 		this.findings = findings;
-		this.apply(Decoration.set(ranges, true));
+		this.apply(Decoration.set(ranges, true), signature.sort().join("|"));
 
 		if (settings.readabilityStatus) {
 			const paragraphResult = cursorParagraph ? host.cache.get(this.keyOf(cursorParagraph)) : undefined;
@@ -303,8 +327,11 @@ export class HighlightRunner {
 		}, NOTE_PASS_DELAY);
 	}
 
-	private apply(decorations: DecorationSet): void {
-		if (this.destroyed) return;
+	/** Draw, unless the result is identical to what is already on screen. */
+	private apply(decorations: DecorationSet, signature: string): void {
+		if (this.destroyed || signature === this.drawn) return;
+		this.drawn = signature;
+		debug("drawing", signature ? signature.split("|").length : 0, "highlights");
 		this.view.dispatch({ effects: setHighlights.of(decorations) });
 	}
 }

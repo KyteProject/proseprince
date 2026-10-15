@@ -1,6 +1,6 @@
 {
   "name": "proseprince",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Fiction-focused prose highlighting for Obsidian: parts of speech, filter words, and craft lenses inspired by King and Le Guin.",
   "main": "main.js",
   "private": true,
