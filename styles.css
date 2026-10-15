@@ -1,0 +1,212 @@
+/* ProsePrince: parts of speech colour the text; craft checks tint the background; sentence
+   rhythm is a fainter tint behind whole sentences. Underlines stay free for grammar checkers
+   such as Harper or LanguageTool. */
+
+body {
+	--pp-adj: #b07400;
+	--pp-adv: #8e44ad;
+	--pp-noun: #1f6fb2;
+	--pp-propn: #12806b;
+	--pp-pron: #b0407a;
+	--pp-num: #a0522d;
+	--pp-verb: #2a8a3e;
+	--pp-aux: #5d6d7e;
+	--pp-conj: #7a5c4f;
+	--pp-ooze: #c0392b;
+
+	/* word choice */
+	--pp-cliche: rgba(232, 67, 147, 0.2);
+	--pp-redundancy: rgba(155, 89, 182, 0.22);
+	--pp-filler: rgba(241, 196, 15, 0.3);
+	--pp-qualifier: rgba(230, 160, 20, 0.28);
+	--pp-weasel: rgba(170, 120, 60, 0.24);
+	--pp-hedge: rgba(150, 140, 220, 0.24);
+	/* viewpoint and voice */
+	--pp-filter-word: rgba(52, 152, 219, 0.2);
+	--pp-passive: rgba(26, 188, 156, 0.22);
+	--pp-adverb: rgba(142, 68, 173, 0.18);
+	--pp-tag-adverb: rgba(200, 50, 160, 0.22);
+	/* sentences */
+	--pp-weak-verb: rgba(93, 109, 126, 0.24);
+	--pp-nominalization: rgba(0, 170, 200, 0.2);
+	--pp-opener: rgba(80, 90, 200, 0.2);
+	/* modifiers */
+	--pp-stacked-modifier: rgba(230, 126, 34, 0.24);
+	--pp-participle: rgba(39, 174, 96, 0.22);
+	/* repetition and imagery */
+	--pp-echo: rgba(231, 76, 60, 0.18);
+	--pp-metaphor: rgba(212, 172, 13, 0.2);
+	/* dialogue */
+	--pp-dialogue-punct: rgba(255, 99, 71, 0.32);
+
+	/* rhythm: short (cool) to long (warm) */
+	--pp-rhythm-1: rgba(52, 152, 219, 0.1);
+	--pp-rhythm-2: rgba(26, 188, 156, 0.1);
+	--pp-rhythm-3: rgba(46, 204, 113, 0.1);
+	--pp-rhythm-4: rgba(241, 196, 15, 0.12);
+	--pp-rhythm-5: rgba(230, 126, 34, 0.12);
+	--pp-rhythm-6: rgba(231, 76, 60, 0.12);
+}
+
+body.theme-dark {
+	--pp-adj: #f0b450;
+	--pp-adv: #c39bd3;
+	--pp-noun: #7fb8e8;
+	--pp-propn: #5fd1b8;
+	--pp-pron: #f08cbc;
+	--pp-num: #e3a07a;
+	--pp-verb: #7fd48e;
+	--pp-aux: #aab7c4;
+	--pp-conj: #c8a99b;
+	--pp-ooze: #ff6b5b;
+
+	--pp-cliche: rgba(245, 110, 175, 0.24);
+	--pp-redundancy: rgba(190, 140, 215, 0.24);
+	--pp-filler: rgba(241, 196, 15, 0.24);
+	--pp-qualifier: rgba(240, 170, 40, 0.24);
+	--pp-weasel: rgba(205, 160, 105, 0.24);
+	--pp-hedge: rgba(175, 165, 240, 0.24);
+	--pp-filter-word: rgba(93, 173, 226, 0.24);
+	--pp-passive: rgba(72, 220, 185, 0.22);
+	--pp-adverb: rgba(195, 155, 211, 0.22);
+	--pp-tag-adverb: rgba(235, 110, 200, 0.24);
+	--pp-weak-verb: rgba(170, 183, 196, 0.22);
+	--pp-nominalization: rgba(70, 205, 230, 0.22);
+	--pp-opener: rgba(130, 140, 240, 0.24);
+	--pp-stacked-modifier: rgba(235, 152, 78, 0.26);
+	--pp-participle: rgba(88, 214, 141, 0.22);
+	--pp-echo: rgba(241, 148, 138, 0.24);
+	--pp-metaphor: rgba(240, 205, 70, 0.22);
+	--pp-dialogue-punct: rgba(255, 120, 95, 0.34);
+
+	--pp-rhythm-1: rgba(93, 173, 226, 0.12);
+	--pp-rhythm-2: rgba(72, 201, 176, 0.12);
+	--pp-rhythm-3: rgba(88, 214, 141, 0.12);
+	--pp-rhythm-4: rgba(244, 208, 63, 0.13);
+	--pp-rhythm-5: rgba(235, 152, 78, 0.14);
+	--pp-rhythm-6: rgba(241, 120, 100, 0.14);
+}
+
+.pp-pos-adj { color: var(--pp-adj); }
+.pp-pos-adv { color: var(--pp-adv); }
+.pp-pos-noun { color: var(--pp-noun); }
+.pp-pos-propn { color: var(--pp-propn); }
+.pp-pos-pron { color: var(--pp-pron); }
+.pp-pos-num { color: var(--pp-num); }
+.pp-pos-verb { color: var(--pp-verb); }
+.pp-pos-aux { color: var(--pp-aux); }
+.pp-pos-conj { color: var(--pp-conj); }
+
+.pp-check { border-radius: 3px; cursor: help; }
+.pp-check-cliche { background-color: var(--pp-cliche); }
+.pp-check-redundancy { background-color: var(--pp-redundancy); }
+.pp-check-filler { background-color: var(--pp-filler); }
+.pp-check-qualifier { background-color: var(--pp-qualifier); }
+.pp-check-weasel { background-color: var(--pp-weasel); }
+.pp-check-hedge { background-color: var(--pp-hedge); }
+.pp-check-filter-word { background-color: var(--pp-filter-word); }
+.pp-check-passive { background-color: var(--pp-passive); }
+.pp-check-adverb { background-color: var(--pp-adverb); }
+.pp-check-tag-adverb { background-color: var(--pp-tag-adverb); }
+.pp-check-weak-verb { background-color: var(--pp-weak-verb); }
+.pp-check-nominalization { background-color: var(--pp-nominalization); }
+.pp-check-opener { background-color: var(--pp-opener); }
+.pp-check-stacked-modifier { background-color: var(--pp-stacked-modifier); }
+.pp-check-participle { background-color: var(--pp-participle); }
+.pp-check-echo { background-color: var(--pp-echo); }
+.pp-check-metaphor { background-color: var(--pp-metaphor); }
+/* Dialogue punctuation marks a single character, so give it a little width and an outline. */
+.pp-check-dialogue-punct { background-color: var(--pp-dialogue-punct); outline: 1px solid var(--pp-dialogue-punct); padding: 0 1px; }
+
+.pp-rhythm { border-radius: 2px; }
+.pp-rhythm-1 { background-color: var(--pp-rhythm-1); }
+.pp-rhythm-2 { background-color: var(--pp-rhythm-2); }
+.pp-rhythm-3 { background-color: var(--pp-rhythm-3); }
+.pp-rhythm-4 { background-color: var(--pp-rhythm-4); }
+.pp-rhythm-5 { background-color: var(--pp-rhythm-5); }
+.pp-rhythm-6 { background-color: var(--pp-rhythm-6); }
+
+/* Ooze mode: adverbs bleed red ink. */
+.pp-ooze .pp-pos-adv {
+	color: var(--pp-ooze);
+	font-weight: 600;
+	text-shadow: 0 0.12em 0.18em color-mix(in srgb, var(--pp-ooze) 45%, transparent);
+}
+
+/* Hover card. */
+.pp-tooltip {
+	max-width: 340px;
+	padding: 6px 8px;
+	font-family: var(--font-interface, system-ui, sans-serif);
+	font-size: var(--font-ui-small, 13px);
+	line-height: 1.4;
+}
+.pp-tooltip-item + .pp-tooltip-item {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.3));
+}
+.pp-tooltip-title { font-weight: 600; }
+.pp-tooltip-note { color: var(--text-muted, inherit); margin-top: 2px; }
+.pp-tooltip-action {
+	margin-top: 6px;
+	font-size: inherit;
+	padding: 2px 8px;
+	cursor: pointer;
+}
+
+/* Settings tab: where each toggle's state comes from. */
+.pp-setting-turns-on { color: var(--text-normal); }
+.pp-setting-via { color: var(--text-faint); }
+.pp-setting-overridden { color: var(--text-accent); font-weight: 600; }
+
+/* Status bar: icons instead of words. */
+.pp-status-lens, .pp-status-readability { display: inline-flex; align-items: center; gap: 4px; }
+.pp-status-icon { display: inline-flex; }
+.pp-status-icon svg { width: var(--icon-xs, 14px); height: var(--icon-xs, 14px); }
+.pp-status-readability .pp-status-icon:not(:first-child) { margin-left: 4px; }
+.pp-status-dot { color: var(--text-accent); font-weight: 700; margin-left: -2px; }
+.pp-status-inactive { opacity: 0.4; }
+.pp-folder-row .setting-item-name { font-family: var(--font-monospace); font-size: 0.9em; }
+
+/* "How to approach this" drawer in the hover card. */
+.pp-guide { margin-top: 6px; }
+.pp-guide > summary { cursor: pointer; color: var(--text-muted, inherit); font-size: 0.95em; }
+.pp-guide > summary:hover { color: var(--text-normal, inherit); }
+.pp-guide-principle { margin: 6px 0 4px; }
+.pp-guide-examples { margin: 0 0 4px; padding-left: 1.1em; }
+.pp-guide-examples li { margin: 2px 0; }
+.pp-guide-before { color: var(--text-muted, inherit); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
+.pp-guide-after { font-style: italic; }
+.pp-guide-keep { margin: 4px 0 0; color: var(--text-muted, inherit); font-size: 0.95em; }
+
+/* Colour swatches in the settings tab. */
+.pp-setting-pos-adj .setting-item-name { color: var(--pp-adj); }
+.pp-setting-pos-adv .setting-item-name { color: var(--pp-adv); }
+.pp-setting-pos-noun .setting-item-name { color: var(--pp-noun); }
+.pp-setting-pos-propn .setting-item-name { color: var(--pp-propn); }
+.pp-setting-pos-pron .setting-item-name { color: var(--pp-pron); }
+.pp-setting-pos-num .setting-item-name { color: var(--pp-num); }
+.pp-setting-pos-verb .setting-item-name { color: var(--pp-verb); }
+.pp-setting-pos-aux .setting-item-name { color: var(--pp-aux); }
+.pp-setting-pos-conj .setting-item-name { color: var(--pp-conj); }
+.pp-setting-check-cliche .setting-item-name { background: var(--pp-cliche); }
+.pp-setting-check-redundancy .setting-item-name { background: var(--pp-redundancy); }
+.pp-setting-check-filler .setting-item-name { background: var(--pp-filler); }
+.pp-setting-check-qualifier .setting-item-name { background: var(--pp-qualifier); }
+.pp-setting-check-weasel .setting-item-name { background: var(--pp-weasel); }
+.pp-setting-check-hedge .setting-item-name { background: var(--pp-hedge); }
+.pp-setting-check-filterWord .setting-item-name { background: var(--pp-filter-word); }
+.pp-setting-check-passive .setting-item-name { background: var(--pp-passive); }
+.pp-setting-check-adverb .setting-item-name { background: var(--pp-adverb); }
+.pp-setting-check-tagAdverb .setting-item-name { background: var(--pp-tag-adverb); }
+.pp-setting-check-weakVerb .setting-item-name { background: var(--pp-weak-verb); }
+.pp-setting-check-nominalization .setting-item-name { background: var(--pp-nominalization); }
+.pp-setting-check-opener .setting-item-name { background: var(--pp-opener); }
+.pp-setting-check-stackedModifier .setting-item-name { background: var(--pp-stacked-modifier); }
+.pp-setting-check-participle .setting-item-name { background: var(--pp-participle); }
+.pp-setting-check-echo .setting-item-name { background: var(--pp-echo); }
+.pp-setting-check-metaphor .setting-item-name { background: var(--pp-metaphor); }
+.pp-setting-check-dialoguePunct .setting-item-name { background: var(--pp-dialogue-punct); }
+.pp-setting-check-cliche .setting-item-name,
+[class*="pp-setting-check-"] .setting-item-name { display: inline-block; padding: 0 4px; border-radius: 3px; }
