@@ -153,12 +153,21 @@ Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rule
 - wink is a small, fast model (roughly mid-90s per-word tagging accuracy on news text, lower on fiction). Expect occasional mis-tags, e.g. *-ing* verbs tagged as nouns or nouns tagged as adjectives; the rules work around the common ones.
 - Participles after the noun (*arms wrapped around him*) need a dependency parse; not detected yet.
 - Echoes and repeated openers are found within a paragraph, not across paragraphs.
+- Speaker attribution is heuristic. Back-to-back lines from the same speaker throw turn-taking out of step, "he" and "she" are only resolved from the narration of the current scene, and a scene that runs into the next without a break can carry a pronoun across. Guesses are drawn dotted and say so on hover.
+- The note's own name finder sometimes takes a capitalised word at a sentence start ("The", "His", "Captain") for a name; the dialogue rules filter these out, but the parts-of-speech colours can still show them.
+- Datamuse requires an API key from 1 February 2027; without one, online lookups will stop working from then.
 
 ## Roadmap
 
-- Remaining Le Guin chapters: tense consistency (6), point of view and head-hopping (7–8), telling markers (9), crowding map (10), sound (1).
+Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14).
+
+- Remaining Le Guin chapters: tense consistency (6), point of view and head-hopping (7–8; the frontmatter `pov` and the dialogue pronoun tracking are a start), telling markers (9), crowding map (10), sound (1; the lookup card's rhymes are a start).
 - Exercise mode: pick one of *Steering the Craft*'s exercises and flag only what breaks its constraint.
-- Dialogue lens (speakers, narration dimmed); writer's own word lists.
+- Writer's own word lists (a Words lens), seeded from the sidebar's repeated words and the words you replace most in lookups; then Accents: words a character would or wouldn't say, building on the voices table.
+- Smaller checks: dangling openers ("Wet and panting, anger surged"), a choppiness hint (high variety but nearly all short sentences), cross-paragraph echoes and openers, an ellipsis followed by narration as an interruption.
+- A cleaner note name finder, so sentence-start capitals aren't taken for names.
+- Dialogue options: single-quote and dash-style dialogue.
+- An offline WordNet pack for lookups, as a separate download.
 - Optional stronger tagger that refines paragraphs when you pause.
 
 ## Credits
