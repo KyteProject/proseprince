@@ -63,7 +63,20 @@ The ribbon's scroll icon (or *Open outline sidebar*) opens an outline for the no
 
 - **Scene**: `summary`, `status`, `pov`, `setting`, `day` and `characters` from the note's frontmatter.
 - **This note**: words, characters (with spaces), paragraphs, sentences, reading time and dialogue share, counting prose only: no frontmatter, `%% … %%` comments or pins, code, headings or callouts. Reading ease, grade and rhythm underneath. With `target: 2500` in the frontmatter, a progress bar; and the words added since you opened the note this session.
-- **Beats**: a single `#` heading is the title and every other heading is a beat (indented by level). Each beat is a jump link with its word count, its issues, and a bar showing its length against the longest beat with the dialogue part darker. The beat at the cursor is highlighted.
+- **Beats**: a single `#` heading is the title and every other heading is a beat (indented by level). Each beat is a jump link with its word count, its issues, and a bar showing its length against the longest beat with the dialogue part darker. A beat can carry its own word target in a hidden comment under its heading:
+
+  ```
+  ## Breakfast Bar
+  %%Beat.
+  target: 450
+  who: Linh, Ruoi
+  change: Linh lets her in
+  %%
+  ```
+
+  Its bar then shows progress towards the target (orange once past it), the count reads "312 / 450", and the `change:` note shows on hover. `who:` (everyone present, speaking or not) shows under the beat as a prompt, each name marked: ● speaks, ○ named but silent, dotted orange when listed but not named in the beat yet; descriptions ("Unnamed partner") aren't checked, and anyone who speaks without being listed shows as "+Name". The beat at the cursor is highlighted.
+
+  `who:` helps the Dialogue lens too: names listed there count as names throughout the note, the speaker card offers them as pins first, and in a scene with exactly two people an untagged line that alternates away from one of them is attributed to the other (still a dotted guess).
 - **Sentence rhythm**: one bar per sentence (or per small group in a long chapter), by felt length, cool to warm; click to go there.
 - **Issues**: counts per check, grouped as in settings, following your lenses (switch to *All checks* for an edit pass). Click a check to walk through its occurrences.
 - **Dialogue**: speakers with their colour, lines and share (hover for more; click to walk through their lines), how many lines are certain, guessed or unclear, long untagged runs, and the voices window.

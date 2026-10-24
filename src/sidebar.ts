@@ -195,16 +195,55 @@ export class OutlineView extends ItemView {
 			const head = row.createDiv({ cls: "pp-beat-head" });
 			head.createSpan({ cls: `pp-beat-name${b.opening ? " pp-beat-opening" : ""}`, text: b.opening ? "Before the first heading" : b.text });
 			if (b.issues) head.createSpan({ cls: "pp-beat-issues", text: String(b.issues) }).setAttribute("aria-label", `${b.issues} issue${b.issues === 1 ? "" : "s"} in this beat`);
-			head.createSpan({ cls: "pp-beat-words", text: num(b.words) });
-			// Length against the longest beat, with the speech share inside it.
-			const bar = row.createDiv({ cls: "pp-beat-bar" });
-			bar.style.width = `${Math.max(4, (b.words / most) * 100)}%`;
+			if (b.who?.length || b.unlisted?.length) this.cast(row, b);
+			const track = row.createDiv({ cls: "pp-beat-track" });
+			const bar = track.createDiv({ cls: "pp-beat-bar" });
+			if (b.target) {
+				// Progress to the beat's own target: the track is the target, the bar the words so far.
+				const progress = b.words / b.target;
+				head.createSpan({ cls: "pp-beat-words", text: `${num(b.words)} / ${num(b.target)}` });
+				track.addClass("has-target");
+				bar.style.width = `${Math.min(100, progress * 100)}%`;
+				if (progress > 1) bar.addClass("is-over");
+			} else {
+				// No target: length against the longest beat.
+				head.createSpan({ cls: "pp-beat-words", text: num(b.words) });
+				bar.style.width = `${Math.max(4, (b.words / most) * 100)}%`;
+			}
 			bar.createDiv({ cls: "pp-beat-speech" }).style.width = `${b.dialogue * 100}%`;
-			row.setAttribute("aria-label", `${num(b.words)} words · ${pct(b.dialogue)} dialogue`);
+			const tip = [
+				b.target ? `${num(b.words)} of ${num(b.target)} words (${pct(b.words / b.target)})` : `${num(b.words)} words`,
+				`${pct(b.dialogue)} dialogue`,
+			].join(" · ");
+			row.setAttribute("aria-label", b.change ? `${tip}\nChange: ${b.change}` : tip);
 			row.onclick = () => this.jump(Math.max(0, b.from));
 			this.beatRows.push(row);
 		}
-		body.createDiv({ cls: "pp-outline-note", text: "Bar: length against the longest beat; the darker part is dialogue." });
+		body.createDiv({
+			cls: "pp-outline-note",
+			text: r.beats.some((b) => b.target)
+				? "Bar: progress to the beat's target (a target: line in a %% comment under its heading), or length against the longest beat when it has none. The darker part is dialogue."
+				: "Bar: length against the longest beat; the darker part is dialogue. Add a target: 450 line in a %% comment under a heading to track it.",
+		});
+	}
+
+	/** The beat's `who:` as a prompt, each person marked against the prose, plus anyone speaking unlisted. */
+	private cast(row: HTMLElement, b: OutlineReport["beats"][number]): void {
+		const line = row.createDiv({ cls: "pp-beat-who" });
+		const tips: Record<string, string> = {
+			speaks: "speaks in this beat",
+			present: "named in this beat, no lines (fine: who: is who's present)",
+			missing: "listed in who: but not named in this beat yet",
+			described: "described, so not checked",
+		};
+		for (const w of b.who ?? []) {
+			const span = line.createSpan({ cls: `pp-who pp-who-${w.status}`, text: w.name });
+			span.setAttribute("aria-label", `${w.name}: ${tips[w.status]}`);
+		}
+		for (const name of b.unlisted ?? []) {
+			const span = line.createSpan({ cls: "pp-who pp-who-unlisted", text: `+${name}` });
+			span.setAttribute("aria-label", `${name} speaks here but isn't in the beat's who: line`);
+		}
 	}
 
 	private rhythm(root: HTMLElement, r: OutlineReport, ctx: OutlineContext): void {

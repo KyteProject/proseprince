@@ -62,6 +62,53 @@ export function beatsOf(headings: readonly Heading[]): { title: Heading | null; 
 	return { title: null, beats: [...headings] };
 }
 
+export interface BeatNotes {
+	/** Word target for the beat: a `target: 350` line in a `%% … %%` comment under its heading. */
+	target?: number;
+	/** What changes in the beat: a `change: …` line in the same comment, when filled in. */
+	change?: string;
+	/** Who is in the scene (present, not necessarily speaking): a `who: Linh, Ruoi` line. */
+	who?: string[];
+}
+
+/** A `who:` entry that names someone ("Ruoi"), as opposed to describing them ("Unnamed partner"). */
+export const isNamedPerson = (entry: string) => /^\p{Lu}[\p{L}'’-]*(?: \p{Lu}[\p{L}'’-]*)*$/u.test(entry) && !/^(unnamed|someone|nobody)\b/i.test(entry);
+
+/**
+ * Targets and notes the writer keeps in a hidden comment under each heading:
+ *
+ *   ## Breakfast Bar
+ *   %%Beat.
+ *   target: 450
+ *   change: Linh lets the friend in
+ *   %%
+ *
+ * Read from the heading to the next heading, so a beat's notes never leak into the one after it.
+ */
+export function beatNotes(doc: string, headings: readonly Heading[]): BeatNotes[] {
+	const sorted = [...headings].sort((a, b) => a.from - b.from);
+	return headings.map((h) => {
+		const next = sorted.find((o) => o.from > h.from);
+		const section = doc.slice(h.to, next ? next.from : doc.length);
+		const notes: BeatNotes = {};
+		for (const m of section.matchAll(/%%([\s\S]*?)%%/g)) {
+			const target = /^[ \t]*target[ \t]*:[ \t]*"?([\d,.]+)"?[ \t]*$/im.exec(m[1]!);
+			const change = /^[ \t]*change[ \t]*:[ \t]*(\S.*?)[ \t]*$/im.exec(m[1]!);
+			const who = /^[ \t]*who[ \t]*:[ \t]*(\S.*?)[ \t]*$/im.exec(m[1]!);
+			if (who && notes.who === undefined) {
+				const people = who[1]!.split(/[,;]|\band\b/).map((w) => w.replace(/\[\[|\]\]/g, "").trim().replace(/[.]+$/, "").trim()).filter(Boolean);
+				if (people.length) notes.who = people;
+			}
+			if (target && notes.target === undefined) {
+				const n = Number(target[1]!.replace(/,/g, ""));
+				if (Number.isFinite(n) && n > 0) notes.target = n;
+			}
+			if (change && notes.change === undefined) notes.change = change[1];
+		}
+		return notes;
+	});
+}
+
 /** Index of the beat containing a document offset: the last beat starting at or before it, -1 before the first. */
 export function beatAt(beats: readonly Heading[], pos: number): number {
 	let found = -1;

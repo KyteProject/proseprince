@@ -9,7 +9,7 @@ import type { SpeakerKind } from "../analysis/dialogue/speech";
 import { longestStretches, type Stretch, type Voice, type VoiceLine, voices } from "../analysis/dialogue/voices";
 import { rhythmTier } from "../analysis/rhythm";
 import { GUIDES, type GuideKey, SUGGESTION_ROWS } from "../analysis/guides";
-import { beatAt, beatsOf, countLine, countWords, headingsIn, isProseLine, repeatedWords } from "../analysis/outline";
+import { beatAt, type BeatNotes, beatNotes, beatsOf, countLine, countWords, type Heading, headingsIn, isNamedPerson, isProseLine, repeatedWords } from "../analysis/outline";
 import { type AnalysisOptions, CHECK_KINDS, type CheckKind, kindSlug, type Highlight, type LookupHint, type Pairing, type ParagraphResult, type ParagraphStats } from "../analysis/types";
 import { displayFor, pickEdits, shiftHint } from "../lookup/edit";
 import { chips } from "../lookup/popover";
@@ -76,6 +76,8 @@ interface SpeechFinding {
 	to: number;
 	attribution: Attribution;
 	colour: string | null;
+	/** Who is in the scene (the beat's `who:` line), offered first when pinning. */
+	cast: string[];
 	/** Document offset and text of the line (the dialogue unit), for pins. */
 	paragraphFrom: number;
 	paragraphText: string;
@@ -111,6 +113,17 @@ export interface BeatRow {
 	/** Document offset of the heading, or of the note's first prose for the opening stretch. */
 	from: number;
 	words: number;
+	/** Word target from a `%% target: 350 %%` comment under the heading, if there is one. */
+	target?: number;
+	/** The beat's "change:" note from the same comment, if filled in. */
+	change?: string;
+	/**
+	 * The beat's `who:` line, each person checked against the prose: speaks, present (named but
+	 * silent), missing (listed but never named), or described ("Unnamed partner": can't be checked).
+	 */
+	who?: { name: string; status: "speaks" | "present" | "missing" | "described" }[];
+	/** People who speak in the beat but aren't in its `who:` line. */
+	unlisted?: string[];
 	/** Share of the beat's words that are speech. */
 	dialogue: number;
 	issues: number;
@@ -241,6 +254,25 @@ function allParagraphs(doc: Text): Paragraph[] {
 	return applyExclusions(paragraphsAround(doc, [{ from: 0, to: doc.length }]), excludedFor(doc));
 }
 
+/** The note's beats and the notes under them (target, change, who), per document version. */
+const sceneCache = new WeakMap<Text, { beats: Heading[]; notes: BeatNotes[] }>();
+function scenesOf(doc: Text): { beats: Heading[]; notes: BeatNotes[] } {
+	let s = sceneCache.get(doc);
+	if (!s) {
+		const text = doc.toString();
+		const { beats } = beatsOf(headingsIn(text, excludedFor(doc)));
+		sceneCache.set(doc, (s = { beats, notes: beatNotes(text, beats) }));
+	}
+	return s;
+}
+
+/** Who is in the scene at a document offset, from the beat's `who:` line. */
+function castAt(doc: Text, pos: number): string[] | undefined {
+	const { beats, notes } = scenesOf(doc);
+	const i = beatAt(beats, pos);
+	return i >= 0 ? notes[i]?.who : undefined;
+}
+
 /** Names evidenced in the note itself (capitalised mid-sentence), per document version. */
 const docNamesCache = new WeakMap<Text, Set<string>>();
 function docNames(doc: Text): Set<string> {
@@ -337,7 +369,9 @@ export class HighlightRunner {
 
 	/** Attach the known names (note evidence + cast) that occur in each paragraph. */
 	private prepare(doc: Text, paragraphs: Paragraph[]): Prepared[] {
-		const known = new Set([...docNames(doc), ...this.host.castNames()]);
+		// Names listed in a beat's `who:` line count as names everywhere in the note.
+		const listed = scenesOf(doc).notes.flatMap((n) => n.who ?? []).filter(isNamedPerson).flatMap((n) => n.split(" "));
+		const known = new Set([...docNames(doc), ...this.host.castNames(), ...listed]);
 		return paragraphs.map((p) => ({ ...p, names: namesIn(p.text, known) }));
 	}
 
@@ -459,7 +493,7 @@ export class HighlightRunner {
 			for (const line of lines) {
 				const text = p.text.slice(line.from, line.to);
 				units.push({ paragraph: p, from: line.from, text });
-				items.push({ text, info: line });
+				items.push({ text, info: line, cast: castAt(doc, p.from + line.from) });
 			}
 		}
 		const attributed = attribute(items, canonical);
@@ -499,6 +533,31 @@ export class HighlightRunner {
 		});
 	}
 
+	/** Each beat's `who:` against its prose: who speaks, who is only named, who never turns up, who speaks unlisted. */
+	private checkCast(text: string, beats: Heading[], rows: BeatRow[], d: NoteDialogue): void {
+		const canonical = (name: string) => (this.host.canonicalSpeaker?.(name) ?? name).toLowerCase();
+		const spoke = beats.map(() => new Map<string, string>());
+		d.units.forEach((u, i) => {
+			const b = beatAt(beats, u.paragraph.from + u.from);
+			if (b < 0) return;
+			for (const a of d.attributed[i] ?? []) if (a.speaker && a.certain && !a.thought) spoke[b]!.set(a.speaker.toLowerCase(), a.speaker);
+		});
+		rows.forEach((row, i) => {
+			if (!row.who) return;
+			const end = beats[i + 1]?.from ?? text.length;
+			const prose = maskInline(text.slice(beats[i]!.to, end));
+			const speakers = spoke[i]!;
+			row.who = row.who.map(({ name }) => {
+				if (!isNamedPerson(name)) return { name, status: "described" as const };
+				if (speakers.has(canonical(name))) return { name, status: "speaks" as const };
+				const named = new RegExp(`(?<![\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "u").test(prose);
+				return { name, status: named ? ("present" as const) : ("missing" as const) };
+			});
+			const listed = new Set(row.who.map((w) => canonical(w.name)));
+			row.unlisted = [...speakers.values()].filter((s) => /^\p{Lu}/u.test(s) && !listed.has(s.toLowerCase()));
+		});
+	}
+
 	/** One speaker's voice in this note, for the speaker card. */
 	voiceOf(speaker: string): Voice | undefined {
 		const d = this.lastDialogue;
@@ -526,6 +585,7 @@ export class HighlightRunner {
 		const pending = all.filter((p) => !host.cache.has(this.keyOf(p))).length;
 		const text = doc.toString();
 		const { title, beats } = beatsOf(headingsIn(text, excludedFor(doc)));
+		const notes = beatNotes(text, beats);
 		const active = effective(host.settings);
 		const options: AnalysisOptions = {
 			pos: active.pos,
@@ -541,7 +601,12 @@ export class HighlightRunner {
 			speechIn.set(u.paragraph.from, list);
 		});
 
-		const rows: BeatRow[] = beats.map((b) => ({ opening: false, text: b.text, level: b.level, from: b.from, words: 0, dialogue: 0, issues: 0 }));
+		const rows: BeatRow[] = beats.map((b, i) => ({
+			opening: false, text: b.text, level: b.level, from: b.from, words: 0,
+			target: notes[i]?.target, change: notes[i]?.change,
+			who: notes[i]?.who?.map((name) => ({ name, status: "described" as const })),
+			dialogue: 0, issues: 0,
+		}));
 		const opening: BeatRow = { opening: true, text: "Opening", level: beats[0]?.level ?? 2, from: -1, words: 0, dialogue: 0, issues: 0 };
 		const speechWords = new Array<number>(rows.length).fill(0);
 		let openingSpeech = 0;
@@ -598,6 +663,7 @@ export class HighlightRunner {
 			}
 		}
 		rows.forEach((r, i) => (r.dialogue = r.words ? speechWords[i]! / r.words : 0));
+		this.checkCast(text, beats, rows, d);
 		opening.dialogue = opening.words ? openingSpeech / opening.words : 0;
 
 		const exclude = new Set([...host.castNames(), ...host.worldTerms(), ...docNames(doc)].map((w) => w.toLowerCase()));
@@ -682,7 +748,7 @@ export class HighlightRunner {
 				const cls = a.thought ? "pp-thought" : certain ? "pp-speech" : "pp-speech pp-speech-guess";
 				if (dim) this.dimText(p, at, a.from, push);
 				push(cls, colour, p.from + a.from, p.from + a.to);
-				out.push({ from: p.from + a.from, to: p.from + a.to, attribution: a, colour: a.speaker ? colourOf(a.speaker) : null, paragraphFrom: p.from + u.from, paragraphText: u.text });
+				out.push({ from: p.from + a.from, to: p.from + a.to, attribution: a, colour: a.speaker ? colourOf(a.speaker) : null, cast: castAt(this.view.state.doc, p.from + u.from) ?? [], paragraphFrom: p.from + u.from, paragraphText: u.text });
 				at = a.to;
 			}
 			if (dim && !resetsTurns(u.text)) this.dimText(p, at, u.from + u.text.length, push);
@@ -967,7 +1033,13 @@ export function createHighlighter(host: HighlighterHost): { extension: Extension
 			create: () => {
 				const dom = tooltipFor(view, findings, host.settings.guidance !== "hidden", host);
 				const s = speech[0];
-				if (s) dom.prepend(speakerCard(view, runner?.speakers ?? [], s, s.attribution.speaker ? runner?.voiceOf(s.attribution.speaker) : undefined));
+				if (s) {
+					// The scene's cast first (even people who haven't spoken yet), then everyone else who has.
+					const known = runner?.speakers ?? [];
+					const cast = s.cast.map((name) => known.find((k) => k.name.toLowerCase() === name.toLowerCase()) ?? { name, colour: "var(--text-faint)" });
+					const chips = [...cast, ...known.filter((k) => !cast.some((c) => c.name === k.name))];
+					dom.prepend(speakerCard(view, chips, s, s.attribution.speaker ? runner?.voiceOf(s.attribution.speaker) : undefined));
+				}
 				return { dom };
 			},
 		};

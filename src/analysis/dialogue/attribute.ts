@@ -31,6 +31,8 @@ export interface ParagraphDialogue {
 	info: DialogueInfo | null;
 	/** Raw paragraph text, for pins, headings and scene breaks. */
 	text: string;
+	/** Who is in this scene, from the beat's `who:` line: names, or descriptions ("Unnamed partner"). */
+	cast?: string[];
 }
 
 /** How many narration-only paragraphs turn-taking survives. */
@@ -69,6 +71,18 @@ export function attribute(paragraphs: ParagraphDialogue[], canonical: (name: str
 	/** Stands in for an unnamed second speaker, so turn-taking can still alternate back to the named one. */
 	const OTHER = "\u0000other";
 	const turnGuess = (): string | null => (history[1] && history[1] !== OTHER ? history[1] : null);
+	/** The scene's cast, for naming the other person in a two-person exchange. */
+	let cast: string[] = [];
+	/**
+	 * With exactly two people in the scene (`who: Linh, Ruoi`) and one of them just spoke, the other
+	 * person is the one an untagged line alternates to.
+	 */
+	const namedOther = (): string | null => {
+		const last = history[0];
+		if (cast.length !== 2 || !last || last === OTHER) return null;
+		const rest = cast.filter((c) => c.toLowerCase() !== last.toLowerCase());
+		return rest.length === 1 ? rest[0]! : null;
+	};
 	/** "she" → Shaddid for this scene, learned from the narration. Null once two people have claimed it. */
 	let bound = new Map<string, string | null>();
 	const bind = (pronoun: string, speaker: string) => {
@@ -127,6 +141,7 @@ export function attribute(paragraphs: ParagraphDialogue[], canonical: (name: str
 			out.push([]);
 			continue;
 		}
+		cast = (p.cast ?? []).map((c) => (/^\p{Lu}/u.test(c) && !/^unnamed\b/i.test(c) ? canonical(c, "name") : c));
 		for (const link of p.info?.pronouns ?? []) {
 			const who = canonical(link.speaker, "name");
 			if (people.has(who)) bind(link.pronoun, who);
@@ -170,8 +185,12 @@ export function attribute(paragraphs: ParagraphDialogue[], canonical: (name: str
 			[speaker, how, certain] = resolved ? [resolved.speaker, "pronoun", resolved.certain] : [fallback, fallback ? "pronoun" : null, fallback !== null];
 			// Once known for sure, the pronoun keeps meaning this speaker for the scene.
 			if (resolved?.certain && (pronoun === "he" || pronoun === "she") && bound.get(pronoun) === undefined) bind(pronoun, resolved.speaker);
-			// Someone, just not anyone named: keep the turns alternating.
-			if (!speaker && history.length > 0 && history[0] !== OTHER) spoke(OTHER, false);
+			// Someone, just not anyone named: the scene's other person if `who:` says so, else keep the turns alternating.
+			if (!speaker && history.length > 0 && history[0] !== OTHER) {
+				const other = namedOther();
+				if (other) [speaker, how, certain] = [other, "turns", false];
+				else spoke(OTHER, false);
+			}
 		} else if (uniqueBeats.length === 1) {
 			[speaker, how, certain] = [uniqueBeats[0]!, "beat", true];
 		} else {
@@ -181,8 +200,11 @@ export function attribute(paragraphs: ParagraphDialogue[], canonical: (name: str
 			[speaker, how, certain] = contradicted ? [null, null, false] : [guess, guess ? "turns" : null, false];
 			// With one named speaker so far, this line is probably the other, unnamed person: remember that
 			// someone spoke, so the next untagged line can alternate back.
-			if (!speaker && !contradicted && history.length > 0 && history[0] !== OTHER) spoke(OTHER, false);
-			else if (!speaker && history[0] === OTHER && history[1]) {
+			if (!speaker && !contradicted && history.length > 0 && history[0] !== OTHER) {
+				const other = namedOther();
+				if (other) [speaker, how, certain] = [other, "turns", false];
+				else spoke(OTHER, false);
+			} else if (!speaker && history[0] === OTHER && history[1]) {
 				[speaker, how, certain] = [history[1], "turns", false];
 			}
 		}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beatAt, beatsOf, countLine, headingsIn, repeatedWords } from "../src/analysis/outline";
+import { beatAt, beatNotes, beatsOf, countLine, headingsIn, isNamedPerson, repeatedWords } from "../src/analysis/outline";
 
 describe("outline", () => {
 	const doc = "---\ntitle: x\n---\n# The Inspection\n\nIntro.\n\n## The girl's hole\nText.\n\n```\n# not a heading\n```\n## Station house\nMore.";
@@ -30,5 +30,20 @@ describe("outline", () => {
 	it("finds repeated content words, folding plurals and skipping names", () => {
 		const words = ["door", "doors", "door", "Linh", "Linh", "Linh", "said", "said", "said", "cold", "cold"];
 		expect(repeatedWords(words, new Set(["linh"]))).toEqual([{ word: "door", n: 3 }]);
+	});
+
+	it("reads each beat's target and change from its hidden comment", () => {
+		const text = "# Title\n## Loft\n%%Beat.\ntarget: 350\nchange: \n%%\nText.\n## Bar\n%%Beat.\ntarget: 1,100\nchange: Linh lets her in\n%%\n## Open\nNo notes here.";
+		const headings = headingsIn(text, []);
+		expect(beatNotes(text, headings)).toEqual([{}, { target: 350 }, { target: 1100, change: "Linh lets her in" }, {}]);
+	});
+
+	it("reads who is in each beat, names and descriptions", () => {
+		const text = "## Loft\n%%Beat.\nwho: Linh, Ruoi, Unnamed partner.\n%%\n## Bar\n%%\nwho: \n%%";
+		expect(beatNotes(text, headingsIn(text, []))).toEqual([{ who: ["Linh", "Ruoi", "Unnamed partner"] }, {}]);
+		expect(isNamedPerson("Ruoi")).toBe(true);
+		expect(isNamedPerson("Eufemie Kanda")).toBe(true);
+		expect(isNamedPerson("Unnamed partner")).toBe(false);
+		expect(isNamedPerson("the inspector")).toBe(false);
 	});
 });
