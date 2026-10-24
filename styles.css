@@ -352,3 +352,18 @@ body.theme-dark {
 .pp-speaker-dot { width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--pp-speaker, var(--text-faint, #999)); flex: none; }
 .pp-speaker-dot.pp-guess { background: none; border: 1.5px dotted var(--text-faint, #999); }
 .pp-speaker-chip { display: inline-flex; align-items: center; gap: 5px; }
+
+/* "Voices in this note". */
+.pp-voices-modal { width: min(760px, 92vw); }
+.pp-voices-table { width: 100%; border-collapse: collapse; font-size: var(--font-ui-small); }
+.pp-voices-table th, .pp-voices-table td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--background-modifier-border); }
+.pp-voices-table th:first-child, .pp-voices-table td:first-child, .pp-voices-table th:last-child, .pp-voices-table td:last-child { text-align: left; }
+.pp-voices-table th { color: var(--text-muted); font-weight: 500; }
+.pp-voices-who { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pp-voices-words { color: var(--text-muted); font-style: italic; }
+.pp-shape { display: flex; flex-wrap: wrap; gap: 2px; margin: 4px 0; }
+.pp-shape > span { width: 6px; height: 16px; border-radius: 1px; cursor: pointer; }
+.pp-shape-speech { background: var(--pp-speaker, var(--text-faint)); }
+.pp-shape-narration { background: var(--background-modifier-border); }
+.pp-shape-break { width: 10px !important; background: none; }
+.pp-shape-stretch { font-size: var(--font-ui-small); color: var(--text-muted); }

@@ -1,6 +1,6 @@
 # Plan: Dialogue lens
 
-Status: phase 1 built in 0.10.0 (2026-10-24). Pins use `%% speaker: Name %%` (not `%% Name %%`, so other comments are never read as pins). Phase 2 (conventions checks and guides) built in 0.11.0. 0.12.0: lines as dialogue units, titles, described aliases, scene pronoun binding, six non-red colours, every-fifth-line untagged runs. Phase 3 not started.
+Status: phase 1 built in 0.10.0 (2026-10-24). Pins use `%% speaker: Name %%` (not `%% Name %%`, so other comments are never read as pins). Phase 2 (conventions checks and guides) built in 0.11.0. 0.12.0: lines as dialogue units, titles, described aliases, scene pronoun binding, six non-red colours, every-fifth-line untagged runs. Phase 3 (voices: hover line, voices window, scene shape) built in 0.13.0; the status-bar speaker list was dropped (the window and hover card cover it).
 
 ## Goal
 

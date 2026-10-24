@@ -10,6 +10,7 @@ import { LookupService } from "./lookup/service";
 import { type HintResult, type PairingResult, suggestForHint, usualPairings } from "./lookup/suggest";
 import type { LookupHint, Pairing } from "./analysis/types";
 import { ProsePrinceSettingTab } from "./settings";
+import { VoicesModal } from "./voicesModal";
 import {
 	activeLenses,
 	clearOverrides,
@@ -175,6 +176,16 @@ export default class ProsePrincePlugin extends Plugin {
 			callback: async () => {
 				const on = await this.toggleDialogueSetting("highlightsInDialogue");
 				new Notice(`ProsePrince: highlights inside dialogue ${on ? "on" : "off"}`);
+			},
+		});
+		this.addCommand({
+			id: "dialogue-voices",
+			name: "Dialogue: voices in this note",
+			editorCheckCallback: (checking: boolean, editor: Editor, ctx) => {
+				const view = (editor as unknown as { cm?: EditorView }).cm;
+				if (!view || !this.runner) return false;
+				if (!checking) void this.showVoices(view, ctx.file?.basename ?? "this note");
+				return true;
 			},
 		});
 		this.addCommand({
@@ -386,6 +397,13 @@ export default class ProsePrincePlugin extends Plugin {
 		this.saveLookupHistory.run();
 		this.client.dispose();
 		this.cache.clear();
+	}
+
+	private async showVoices(view: EditorView, title: string): Promise<void> {
+		const runner = this.runner ? view.plugin(this.runner) : null;
+		const report = await runner?.voiceReport();
+		if (report) new VoicesModal(this.app, view, title, report).open();
+		else new Notice("ProsePrince: couldn't read this note's dialogue. Try again in a moment.");
 	}
 
 	private async toggleDialogueSetting(key: "highlightsInDialogue" | "dimNarration"): Promise<boolean> {

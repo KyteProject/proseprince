@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { analyzeParagraph } from "../src/analysis/analyze";
 import { attribute, colourSlots, pinIn, resetsTurns, speakersIn, untaggedRuns } from "../src/analysis/dialogue/attribute";
 import { cssColour, nameGroupsIn, speakerIndex } from "../src/analysis/dialogue/cast";
+import { longestStretches, voices } from "../src/analysis/dialogue/voices";
 
 /** The dialogue of a one-line paragraph. */
 const info = (text: string, names: string[] = []) => analyzeParagraph(text, 25, names).dialogue[0]!;
@@ -204,5 +205,32 @@ describe("line by line, titles and pronouns", () => {
 			`The Alliance was quiet. It waited.`,
 			`"Why?" he asked.`,
 		], ["Miller", "Shaddid", "Alliance"])).toEqual(["Miller/tag", "Shaddid/tag", "Miller/pronoun"]);
+	});
+});
+
+describe("voices", () => {
+	const line = (speaker: string, text: string, guessed = false) => ({ speaker, text, guessed });
+
+	it("counts lines, words, questions and share", () => {
+		const [linh, tien] = voices([line("Linh", `"Where are we going?"`), line("Linh", `"Now!"`, true), line("Tien", `"Home. We go home now."`)]).sort((a, b) => a.speaker.localeCompare(b.speaker));
+		expect(linh).toMatchObject({ lines: 2, guessed: 1, words: 5, questions: 0.5, exclamations: 0.5 });
+		expect(tien).toMatchObject({ lines: 1, words: 5, questions: 0 });
+		expect(linh!.share).toBeCloseTo(0.5);
+	});
+
+	it("finds the words one speaker leans on, ignoring function words", () => {
+		const lines = [
+			...Array.from({ length: 6 }, () => line("Amos", `"Yeah, cap, that's a real bad idea, cap."`)),
+			...Array.from({ length: 6 }, () => line("Naomi", `"It's a good plan and the ship can take it."`)),
+		];
+		const amos = voices(lines).find((v) => v.speaker === "Amos")!;
+		expect(amos.distinctive).toContain("cap");
+		expect(amos.distinctive).not.toContain("a");
+	});
+
+	it("finds long stretches of narration or dialogue", () => {
+		const shape = [...Array(9).fill(false), true, null, ...Array(8).fill(true)];
+		expect(longestStretches(shape).map((s) => [s.kind, s.length, s.first])).toEqual([["narration", 9, 0], ["dialogue", 8, 11]]);
+		expect(longestStretches([false, true, false])).toEqual([]);
 	});
 });

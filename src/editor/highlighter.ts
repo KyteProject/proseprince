@@ -6,6 +6,7 @@ import { namesIn, namesInText } from "../analysis/names";
 import { combine, report, type ReadabilityReport } from "../analysis/readability";
 import { attribute, type Attribution, colourSlots, type ParagraphDialogue, pinIn, resetsTurns, speakersIn, UNTAGGED_RUN, untaggedRuns } from "../analysis/dialogue/attribute";
 import type { SpeakerKind } from "../analysis/dialogue/speech";
+import { longestStretches, type Stretch, type Voice, type VoiceLine, voices } from "../analysis/dialogue/voices";
 import { rhythmTier } from "../analysis/rhythm";
 import { GUIDES, type GuideKey, SUGGESTION_ROWS } from "../analysis/guides";
 import { kindSlug, type Highlight, type LookupHint, type Pairing, type ParagraphResult } from "../analysis/types";
@@ -92,6 +93,17 @@ interface NoteDialogue {
 	attributed: Attribution[][];
 	/** Highlights that need the whole conversation (untagged runs), by paragraph start. */
 	extra: Map<number, Highlight[]>;
+	/** Every attributed line's words, for the voices. */
+	lines: VoiceLine[];
+}
+
+/** Everything the "Voices in this note" window shows. */
+export interface VoiceReport {
+	voices: (Voice & { colour: string })[];
+	/** Long stretches without dialogue, or of nothing but dialogue, with where they start. */
+	stretches: (Stretch & { from: number; excerpt: string })[];
+	/** Per line: speech (and whose), narration, or a break; for the scene-shape strip. */
+	shape: { from: number; speech: boolean | null; colour: string | null }[];
 }
 
 const speechMarks = new Map<string, Decoration>();
@@ -198,6 +210,8 @@ export class HighlightRunner {
 	private speech: SpeechFinding[] = [];
 	/** The note's speakers and their colours, in order of first appearance. */
 	speakers: { name: string; colour: string }[] = [];
+	private lastDialogue: NoteDialogue | null = null;
+	private voiceCache: { for: NoteDialogue; voices: Voice[] } | null = null;
 	private noteReport: ReadabilityReport | null = null;
 	private noteReportDoc: Text | null = null;
 	/** What is currently drawn, so an identical result is not dispatched again. */
@@ -329,6 +343,7 @@ export class HighlightRunner {
 
 		const options = { pos: active.pos, checks: active.checks, echoWindow: settings.echoWindow };
 		const noteDialogue = active.dialogue || active.checks.untaggedRun ? this.attributeNote(doc) : null;
+		this.lastDialogue = noteDialogue;
 		const ranges: DecorationRange<Decoration>[] = [];
 		const signature: string[] = [];
 		const findings: Finding[] = [];
@@ -411,7 +426,44 @@ export class HighlightRunner {
 			list.push({ from: a.from, to: a.to, kind: { check: "untaggedRun" }, note: `${UNTAGGED_RUN} lines in a row with no tag or beat: a reader may be counting back to see who's speaking. A tag or beat here would re-anchor them.` });
 			extra.set(from, list);
 		}
-		return { units, attributed, extra };
+		const lines: VoiceLine[] = [];
+		attributed.forEach((spans, i) => {
+			for (const a of spans) {
+				if (a.thought || !a.speaker) continue;
+				lines.push({ speaker: a.speaker, text: units[i]!.paragraph.text.slice(a.from, a.to), guessed: !a.certain });
+			}
+		});
+		return { units, attributed, extra, lines };
+	}
+
+	/** One speaker's voice in this note, for the speaker card. */
+	voiceOf(speaker: string): Voice | undefined {
+		const d = this.lastDialogue;
+		if (!d) return undefined;
+		if (this.voiceCache?.for !== d) this.voiceCache = { for: d, voices: voices(d.lines) };
+		return this.voiceCache.voices.find((v) => v.speaker === speaker);
+	}
+
+	/** The whole note's voices and shape: analyses any paragraphs not yet cached first. */
+	async voiceReport(): Promise<VoiceReport | null> {
+		const doc = this.view.state.doc;
+		const all = this.prepare(doc, allParagraphs(doc));
+		if (!(await this.ensure(all, this.requestId))) return null;
+		const d = this.attributeNote(doc);
+		const slots = colourSlots(speakersIn(d.attributed));
+		const colourOf = (name: string) => this.host.speakerColour?.(name) ?? `var(--pp-speaker-${slots.get(name) ?? 0})`;
+		// Hidden comments and callouts are notes to the writer, not part of the scene.
+		const story = d.units.map((u, i) => ({ u, i })).filter(({ u }) => !/^\s*(%%|>)/.test(u.text));
+		const shape = story.map(({ u, i }) => {
+			const speech = (d.attributed[i] ?? []).filter((a) => !a.thought);
+			const who = speech.find((a) => a.speaker && a.certain)?.speaker ?? null;
+			return { from: u.paragraph.from + u.from, speech: resetsTurns(u.text) ? null : speech.length > 0, colour: who ? colourOf(who) : null };
+		});
+		const stretches = longestStretches(shape.map((s) => s.speech)).map((s) => {
+			const u = story[s.first]!.u;
+			return { ...s, from: u.paragraph.from + u.from, excerpt: u.text.replace(/\s+/g, " ").trim().slice(0, 70) };
+		});
+		return { voices: voices(d.lines).map((v) => ({ ...v, colour: colourOf(v.speaker) })), stretches, shape };
 	}
 
 	private drawDialogue({ units, attributed }: NoteDialogue, visible: Prepared[], ranges: DecorationRange<Decoration>[], signature: string[]): SpeechFinding[] {
@@ -640,7 +692,7 @@ const PIN_COMMENT = /\s?%%\s*speaker\s*:?\s*[^%\n]+?\s*%%/i;
  * Who says this line, and why: "Linh · dialogue tag", or a guess with its reason. Chips pin a
  * speaker with a hidden `%% speaker: Name %%` comment; "Not speech" marks quotes that aren't dialogue.
  */
-function speakerCard(view: EditorView, speakers: { name: string; colour: string }[], s: SpeechFinding): HTMLElement {
+function speakerCard(view: EditorView, speakers: { name: string; colour: string }[], s: SpeechFinding, voice?: Voice): HTMLElement {
 	const a = s.attribution;
 	const item = document.createElement("div");
 	item.className = "pp-tooltip-item";
@@ -654,6 +706,15 @@ function speakerCard(view: EditorView, speakers: { name: string; colour: string 
 	if (a.thought) {
 		el(item, "div", "pp-tooltip-note", "Direct thought: italics or a thought verb. Not part of the turn-taking.");
 		return item;
+	}
+	if (voice) {
+		const pct = (x: number) => `${Math.round(x * 100)}%`;
+		const parts = [
+			`${voice.lines} line${voice.lines === 1 ? "" : "s"}${voice.guessed ? ` (${voice.guessed} guessed)` : ""}`,
+			`${voice.wordsPerLine.toFixed(1)} words a line`,
+			`${pct(voice.share)} of the dialogue`,
+		];
+		el(item, "div", "pp-tooltip-note pp-voice-line", `${voice.speaker} in this note: ${parts.join(" · ")}`);
 	}
 	if (!certain) {
 		el(item, "div", "pp-tooltip-note", a.speaker
@@ -712,7 +773,8 @@ export function createHighlighter(host: HighlighterHost): { extension: Extension
 			above: true,
 			create: () => {
 				const dom = tooltipFor(view, findings, host.settings.guidance !== "hidden", host);
-				if (speech[0]) dom.prepend(speakerCard(view, runner?.speakers ?? [], speech[0]));
+				const s = speech[0];
+				if (s) dom.prepend(speakerCard(view, runner?.speakers ?? [], s, s.attribution.speaker ? runner?.voiceOf(s.attribution.speaker) : undefined));
 				return { dom };
 			},
 		};

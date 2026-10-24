@@ -55,6 +55,8 @@ Each line counts as its own turn, so a conversation written one speaker per line
 
 Hover a line for who and why, to pin a speaker, or to mark quotes as *Not speech*. Titles are dropped ("Captain Shaddid" is Shaddid). Aliases count as one speaker, described ones too: `- Eufemie | Effie` or `- Shaddid | the captain` in the World note, or a character note's `aliases`. Each speaker keeps the same colour as the cast grows (six colours, none of them red), and `colour: #hex` on a character note sets one by hand.
 
+**Voices.** Hovering a line also shows that speaker in this note ("Linh in this note: 14 lines (3 guessed) · 6.2 words a line · 30% of the dialogue"). The *Dialogue: voices in this note* command opens a table per speaker: lines, words, words per line, how often they ask or exclaim, their share of the talk, and "their words": the words they lean on more than everyone else (a weighted log-odds comparison, common words left out; with a chapter's worth of lines it's a lean, not proof). Below it, the scene's **shape**: one mark per line, coloured by speaker, faint for narration, with the longest stretch of narration without dialogue (or dialogue without narration) when it runs to eight lines or more. Click a mark to go there. It all reads the note only.
+
 ## Where it runs
 
 Settings → **Where ProsePrince runs**: list the folders you write prose in (with autocomplete), and only notes inside them (and their subfolders) are highlighted. With no folders set it runs everywhere. A note's frontmatter always wins: `proseprince: true` switches it on outside those folders, `proseprince: false` switches it off inside them; the **Toggle ProsePrince for this note** command sets the flag for you. Outside the prose folders the status-bar icons dim.
