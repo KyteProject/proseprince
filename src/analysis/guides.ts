@@ -12,7 +12,7 @@ export interface Guide {
 }
 
 /** Keys are a check kind, or "kind.shape" for checks whose fix depends on the shape found. */
-export type GuideKey = CheckKind | `participle.${"before" | "after" | "fronted" | "listed"}`;
+export type GuideKey = CheckKind | `participle.${"before" | "after" | "fronted" | "listed"}` | `dialoguePunct.${"outside" | "mismatch"}`;
 
 export const GUIDES: Record<GuideKey, Guide> = {
 	cliche: {
@@ -124,6 +124,46 @@ export const GUIDES: Record<GuideKey, Guide> = {
 		principle: "Dialogue punctuation follows fixed conventions: a comma joins a line to its speech tag, the tag stays lowercase, an action beat is its own sentence.",
 		examples: [["\"Go\" she said.", "\"Go,\" she said."], ["\"Go,\" she shrugged.", "\"Go.\" She shrugged."]],
 		keep: "In a deliberate house style; otherwise these are mechanical fixes.",
+	},
+	"dialoguePunct.outside": {
+		principle: "In fiction, the comma or full stop that ends a line of dialogue sits inside the closing quote, in British and American publishing alike. Only a question or exclamation mark that belongs to the narration goes outside.",
+		examples: [["\"Wait\", Mara said.", "\"Wait,\" Mara said."], ["\"It's late\".", "\"It's late.\""]],
+		keep: "Quoting a word or title inside narration (She called it \"home\".) follows different rules; dialogue doesn't.",
+	},
+	"dialoguePunct.mismatch": {
+		principle: "A line of speech opens and closes with the same mark. Pick double or single quotes for the whole book and keep to it; mixed marks make the reader stumble over where the speech ends.",
+		examples: [["'Who's there?\" she called.", "\"Who's there?\" she called."]],
+		keep: "A quotation inside dialogue takes the other mark: \"He said 'never', and meant it.\"",
+	},
+	nonSpeechTag: {
+		principle: "A speech tag says how the words came out, and some verbs can't do that: nobody smiles, shrugs or nods a sentence. Make the gesture its own sentence (an action beat), or tag with \"said\" and keep the gesture.",
+		examples: [["\"Fine,\" she smiled.", "\"Fine.\" She smiled."], ["\"Maybe,\" he shrugged.", "He shrugged. \"Maybe.\""]],
+		keep: "Laughing or sighing a word can happen (\"Oh,\" she sighed): keep it when the sound really is the delivery.",
+	},
+	showyTag: {
+		principle: "\"Said\" is nearly invisible, so the reader stays with the words. A showy tag points at itself, and often tells what the line should already show. Used rarely, one lands; used often, they wear thin.",
+		examples: [["\"Get out,\" she hissed.", "\"Get out.\" She didn't raise her voice."], ["\"Never,\" he retorted.", "\"Never,\" he said."]],
+		keep: "When the verb is literally how it sounds and nothing in the line could carry it.",
+	},
+	invertedTag: {
+		principle: "Modern fiction usually puts the speaker before the verb: \"Mara said\", \"her father replied\". The inverted order (\"said Mara\") reads older or more formal, and with a pronoun (\"said he\") it's archaic.",
+		examples: [["\"Come in,\" said Mara.", "\"Come in,\" Mara said."], ["\"No,\" replied her father.", "\"No,\" her father replied."]],
+		keep: "With a long subject (\"said the man by the door\") inverting reads better; and in a period voice that wants it.",
+	},
+	twoSpeakers: {
+		principle: "Each new speaker gets a new paragraph. It's how readers track who is talking without counting, and it lets every line land on its own.",
+		examples: [["\"Ready?\" Mara asked. \"No,\" Tomas said.", "\"Ready?\" Mara asked.\n\n\"No,\" Tomas said."]],
+		keep: "When one character reports what another said, within their own line.",
+	},
+	untaggedRun: {
+		principle: "Untagged lines are fine in a quick two-person exchange, but after four or five the reader starts counting back to find out who is speaking. A tag or a small action beat every few lines keeps them anchored.",
+		examples: [["(six lines of back and forth, no tags)", "(the fourth line gets a beat: Mara set her cup down. \"Then why?\")"]],
+		keep: "When the voices are so distinct that nobody could lose track, or when the speed is the point.",
+	},
+	quotedThought: {
+		principle: "Direct thought is usually set in italics without quote marks, so it can't be mistaken for speech. \"Thought to himself\" says the same thing twice: thinking is always to oneself.",
+		examples: [["\"Strange,\" she thought.", "*Strange*, she thought."], ["he thought to himself", "he thought"]],
+		keep: "In a house style that quotes thought, keep it consistent across the book.",
 	},
 };
 

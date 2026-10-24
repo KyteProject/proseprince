@@ -10,6 +10,7 @@ import { LookupService } from "./lookup/service";
 import { type HintResult, type PairingResult, suggestForHint, usualPairings } from "./lookup/suggest";
 import type { LookupHint, Pairing } from "./analysis/types";
 import { ProsePrinceSettingTab } from "./settings";
+import { VoicesModal } from "./voicesModal";
 import {
 	activeLenses,
 	clearOverrides,
@@ -170,6 +171,32 @@ export default class ProsePrincePlugin extends Plugin {
 			});
 		}
 		this.addCommand({
+			id: "toggle-dialogue-highlights",
+			name: "Toggle highlights inside dialogue",
+			callback: async () => {
+				const on = await this.toggleDialogueSetting("highlightsInDialogue");
+				new Notice(`ProsePrince: highlights inside dialogue ${on ? "on" : "off"}`);
+			},
+		});
+		this.addCommand({
+			id: "dialogue-voices",
+			name: "Dialogue: voices in this note",
+			editorCheckCallback: (checking: boolean, editor: Editor, ctx) => {
+				const view = (editor as unknown as { cm?: EditorView }).cm;
+				if (!view || !this.runner) return false;
+				if (!checking) void this.showVoices(view, ctx.file?.basename ?? "this note");
+				return true;
+			},
+		});
+		this.addCommand({
+			id: "toggle-dim-narration",
+			name: "Dialogue lens: toggle dim narration",
+			callback: async () => {
+				const on = await this.toggleDialogueSetting("dimNarration");
+				new Notice(`ProsePrince: narration ${on ? "dimmed" : "not dimmed"} under the Dialogue lens`);
+			},
+		});
+		this.addCommand({
 			id: "lens-clear",
 			name: "Lens: switch all lenses off",
 			callback: async () => {
@@ -209,6 +236,14 @@ export default class ProsePrincePlugin extends Plugin {
 			else fm.proseprince = on;
 		});
 		new Notice(`ProsePrince ${on ? "on" : "off"} for ${file.basename}`);
+	}
+
+	canonicalSpeaker(name: string): string {
+		return this.world.speakers.get(name.toLowerCase()) ?? name;
+	}
+
+	speakerColour(name: string): string | undefined {
+		return this.world.speakerColours.get(name);
 	}
 
 	castNames(): ReadonlySet<string> {
@@ -364,6 +399,19 @@ export default class ProsePrincePlugin extends Plugin {
 		this.cache.clear();
 	}
 
+	private async showVoices(view: EditorView, title: string): Promise<void> {
+		const runner = this.runner ? view.plugin(this.runner) : null;
+		const report = await runner?.voiceReport();
+		if (report) new VoicesModal(this.app, view, title, report).open();
+		else new Notice("ProsePrince: couldn't read this note's dialogue. Try again in a moment.");
+	}
+
+	private async toggleDialogueSetting(key: "highlightsInDialogue" | "dimNarration"): Promise<boolean> {
+		this.settings.dialogue[key] = !this.settings.dialogue[key];
+		await this.saveSettings();
+		return this.settings.dialogue[key];
+	}
+
 	/** Lenses stack: switch one on or off without touching the others. Returns the new state. */
 	async toggleLens(id: LensId): Promise<boolean> {
 		const on = !this.settings.lenses[id];
@@ -393,6 +441,16 @@ export default class ProsePrincePlugin extends Plugin {
 				setRhythm(this.settings, !effective(this.settings).rhythm);
 				await this.saveSettings();
 			}));
+		menu.addItem((item) => item
+			.setTitle("Highlights inside dialogue")
+			.setChecked(this.settings.dialogue.highlightsInDialogue)
+			.onClick(() => void this.toggleDialogueSetting("highlightsInDialogue")));
+		if (this.settings.lenses.dialogue) {
+			menu.addItem((item) => item
+				.setTitle("Dim narration")
+				.setChecked(this.settings.dialogue.dimNarration)
+				.onClick(() => void this.toggleDialogueSetting("dimNarration")));
+		}
 		const overrides = overrideCount(this.settings);
 		if (overrides > 0) {
 			menu.addItem((item) => item
@@ -506,6 +564,7 @@ export default class ProsePrincePlugin extends Plugin {
 			},
 			rhythm: { ...defaults.rhythm, ...(saved.rhythm ?? {}) },
 			lookup: { ...defaults.lookup, ...(saved.lookup ?? {}) },
+			dialogue: { ...defaults.dialogue, ...(saved.dialogue ?? {}) },
 			folders: Array.isArray(saved.folders) ? saved.folders.filter((f): f is string => typeof f === "string") : [],
 		};
 	}

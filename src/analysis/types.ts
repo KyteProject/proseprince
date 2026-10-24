@@ -1,3 +1,5 @@
+import type { DialogueLine } from "./dialogue/speech";
+
 /** Universal Dependencies part-of-speech tags produced by wink-nlp. */
 export type UposTag =
 	| "ADJ" | "ADP" | "ADV" | "AUX" | "CCONJ" | "DET" | "INTJ" | "NOUN" | "NUM"
@@ -14,14 +16,14 @@ export type CheckKind =
 	| "filterWord" | "passive" | "weakVerb" | "nominalization" | "opener"
 	| "adverb" | "tagAdverb" | "stackedModifier" | "participle"
 	| "echo" | "metaphor"
-	| "dialoguePunct";
+	| "dialoguePunct" | "nonSpeechTag" | "showyTag" | "invertedTag" | "twoSpeakers" | "untaggedRun" | "quotedThought";
 
 export const CHECK_KINDS: readonly CheckKind[] = [
 	"cliche", "redundancy", "filler", "qualifier", "weasel", "hedge",
 	"filterWord", "passive", "weakVerb", "nominalization", "opener",
 	"adverb", "tagAdverb", "stackedModifier", "participle",
 	"echo", "metaphor",
-	"dialoguePunct",
+	"dialoguePunct", "nonSpeechTag", "showyTag", "invertedTag", "twoSpeakers", "untaggedRun", "quotedThought",
 ];
 
 /** Kebab-case name used in CSS classes and in `%% not <name> %%` suppression comments. */
@@ -107,6 +109,8 @@ export interface ParagraphStats {
 
 export interface ParagraphResult {
 	highlights: Highlight[];
+	/** Speech, thought and speaker evidence, line by line, for the Dialogue lens. */
+	dialogue: DialogueLine[];
 	sentences: SentenceInfo[];
 	stats: ParagraphStats;
 }

@@ -1,4 +1,5 @@
 import { type App, normalizePath, TFile } from "obsidian";
+import { cssColour, nameGroupsIn, speakerIndex } from "./analysis/dialogue/cast";
 import { looksLikeNameTitle } from "./analysis/names";
 import { emptyWorld, findInWorld, parseWorld, properNounWords, type World, WORLD_TEMPLATE } from "./analysis/world";
 import { WORLD_NOTE_DEFAULT } from "./settingsModel";
@@ -17,6 +18,10 @@ export class WorldIndex {
 	characterNames = new Set<string>();
 	properNouns: ReadonlySet<string> = new Set();
 	terms: ReadonlySet<string> = new Set();
+	/** Alias (lowercased) → the speaker's shown name, for the Dialogue lens. */
+	speakers = new Map<string, string>();
+	/** Colours set by hand on character notes (`colour:`), by shown name. */
+	speakerColours = new Map<string, string>();
 
 	constructor(
 		private readonly app: App,
@@ -29,13 +34,43 @@ export class WorldIndex {
 
 	/** Rebuild from the vault. Returns true when anything changed. */
 	async rebuild(): Promise<boolean> {
-		const before = [...this.properNouns, "\u0000", ...this.terms].join("\u0001");
+		const signature = () => [...this.properNouns, "\u0000", ...this.terms, "\u0000", ...this.speakers, "\u0000", ...this.speakerColours].join("\u0001");
+		const before = signature();
 		const file = this.app.vault.getAbstractFileByPath(this.worldNotePath);
-		this.world = file instanceof TFile ? parseWorld(await this.app.vault.cachedRead(file)) : emptyWorld();
+		const worldText = file instanceof TFile ? await this.app.vault.cachedRead(file) : "";
+		this.world = file instanceof TFile ? parseWorld(worldText) : emptyWorld();
+		this.indexSpeakers(worldText);
 		this.characterNames = this.fromCharacterNotes();
 		this.properNouns = new Set([...properNounWords(this.world.names), ...properNounWords(this.world.places), ...this.characterNames]);
 		this.terms = new Set([...this.world.terms].map((t) => t.toLowerCase()));
-		return before !== [...this.properNouns, "\u0000", ...this.terms].join("\u0001");
+		return before !== signature();
+	}
+
+	/** Speaker groups for the Dialogue lens: World note names with their aliases, then character notes. */
+	private indexSpeakers(worldText: string): void {
+		const groups = nameGroupsIn(worldText);
+		const colours = new Map<string, string>();
+		for (const file of this.characterFiles()) {
+			const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+			const names = [...asList(fm.name), ...asList(fm.names)].map((n) => n.trim()).filter(Boolean);
+			const aliases = [...asList(fm.aliases), ...asList(fm.alias)].map((n) => n.trim()).filter(Boolean);
+			const group = [...names, ...(looksLikeNameTitle(file.basename) ? [file.basename] : []), ...aliases];
+			if (!group.length) continue;
+			// A name already in the World note keeps the World note's grouping; the note adds its aliases.
+			const existing = groups.find((g) => g.some((n) => group.some((m) => m.toLowerCase() === n.toLowerCase())));
+			if (existing) existing.push(...group.filter((n) => !existing.includes(n)));
+			else groups.push(group);
+			const colour = cssColour(fm.colour ?? fm.color);
+			if (colour) colours.set((existing ?? group)[0]!, colour);
+		}
+		this.speakers = speakerIndex(groups);
+		this.speakerColours = colours;
+	}
+
+	private characterFiles(): TFile[] {
+		const folder = this.paths().characterFolder.trim();
+		const prefix = folder ? normalizePath(folder) + "/" : null;
+		return this.app.vault.getMarkdownFiles().filter((file) => (prefix && file.path.startsWith(prefix)) || this.isCharacterNote(file));
 	}
 
 	/** Whether a changed file can affect the world. */

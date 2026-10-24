@@ -1,6 +1,6 @@
 import { CHECK_KINDS, type CheckKind, POS_CATEGORIES, type PosCategory } from "./analysis/types";
 
-export type LensId = "style" | "king" | "leguin" | "pos" | "rhythm";
+export type LensId = "style" | "king" | "leguin" | "pos" | "rhythm" | "dialogue";
 
 /** Where the World note lives by default: an underscore folder, sorted with _archive and _templates. */
 export const WORLD_NOTE_DEFAULT = "_proseprince/World.md";
@@ -33,6 +33,17 @@ export interface ProsePrinceSettings {
 	folders: string[];
 	/** Optional online word lookups (Datamuse). Off unless the writer switches them on. */
 	lookup: LookupSettings;
+	dialogue: DialogueSettings;
+}
+
+export interface DialogueSettings {
+	/** With the Dialogue lens on, fade everything that isn't speech. */
+	dimNarration: boolean;
+	/**
+	 * Craft and part-of-speech highlights inside quoted speech. Off: characters don't talk like Le
+	 * Guin, so their lines are left alone (dialogue checks still show). Applies with or without the lens.
+	 */
+	highlightsInDialogue: boolean;
 }
 
 export interface LookupSettings {
@@ -54,6 +65,8 @@ export interface Effective {
 	checks: Record<CheckKind, boolean>;
 	oozeMode: boolean;
 	rhythm: boolean;
+	/** Speakers underlined in their colours (the Dialogue lens). */
+	dialogue: boolean;
 }
 
 const allOff = <K extends string>(keys: readonly K[]) => Object.fromEntries(keys.map((k) => [k, false])) as Record<K, boolean>;
@@ -90,6 +103,12 @@ export const CHECK_INFO: Record<CheckKind, { name: string; desc: string; group: 
 	participle: { group: "Modifiers", short: "a verb form as adjective", name: "Verb forms as adjectives", desc: "-ed and -ing forms before a noun: his frayed mind." },
 	echo: { group: "Repetition and imagery", short: "an echo", name: "Echoes", desc: "The same word, in any form, repeated within the echo window. Names are ignored." },
 	metaphor: { group: "Repetition and imagery", short: "a metaphor", name: "Metaphor candidates", desc: "Dead metaphors, and concrete words on abstract ones (velvet silence) to check for freshness." },
+	nonSpeechTag: { group: "Dialogue", short: "a tag that can't speak", name: "Tags that can't speak", desc: "\"Fine,\" she smiled: smiling, laughing, shrugging and nodding don't make words. Make it a beat, or use \"said\"." },
+	showyTag: { group: "Dialogue", short: "a showy tag", name: "Showy tags", desc: "hissed, scoffed, exclaimed, retorted: tags that draw the eye. A hint; fine now and then." },
+	invertedTag: { group: "Dialogue", short: "an inverted tag", name: "Inverted tags", desc: "\"said Linh\", \"replied his father\", \"said he\": modern fiction puts the speaker first. A long subject may invert." },
+	twoSpeakers: { group: "Dialogue", short: "two speakers", name: "Two speakers in a paragraph", desc: "A new speaker starts a new paragraph." },
+	untaggedRun: { group: "Dialogue", short: "a long untagged run", name: "Long untagged runs", desc: "Every fifth line in a row with no tag, beat or pin: the place a tag or beat would re-anchor the reader." },
+	quotedThought: { group: "Dialogue", short: "quoted thought", name: "Thought conventions", desc: "Direct thought in quote marks, and \"thought to himself\"; thought usually goes in italics." },
 	dialoguePunct: { group: "Dialogue", short: "a dialogue punctuation slip", name: "Dialogue punctuation", desc: "Mechanical slips only: a missing comma before a tag (\"…new\" she mused), a full stop or capital where a tag joins its line, ?\". endings, two-dot ellipses, and a speech tag split from its line across paragraphs." },
 };
 
@@ -105,6 +124,7 @@ export interface Lens {
 	checks: readonly CheckKind[];
 	ooze?: boolean;
 	rhythm?: boolean;
+	dialogue?: boolean;
 }
 
 export const LENSES: Lens[] = [
@@ -114,7 +134,7 @@ export const LENSES: Lens[] = [
 		icon: "spell-check",
 		credit: "The word-choice, voice and sentence checks.",
 		pos: [],
-		checks: ["cliche", "redundancy", "filler", "qualifier", "weasel", "hedge", "filterWord", "passive", "adverb", "tagAdverb", "weakVerb", "nominalization", "opener", "echo", "metaphor", "dialoguePunct"],
+		checks: ["cliche", "redundancy", "filler", "qualifier", "weasel", "hedge", "filterWord", "passive", "adverb", "tagAdverb", "weakVerb", "nominalization", "opener", "echo", "metaphor", "dialoguePunct", "nonSpeechTag", "invertedTag", "twoSpeakers", "quotedThought"],
 	},
 	{
 		id: "king",
@@ -122,7 +142,7 @@ export const LENSES: Lens[] = [
 		icon: "crown",
 		credit: "Inspired by Stephen King's On Writing: adverbs ooze red ink.",
 		pos: ["ADV"],
-		checks: ["tagAdverb", "passive", "qualifier", "filler"],
+		checks: ["tagAdverb", "passive", "qualifier", "filler", "nonSpeechTag", "showyTag"],
 		ooze: true,
 	},
 	{
@@ -151,18 +171,28 @@ export const LENSES: Lens[] = [
 		checks: [],
 		rhythm: true,
 	},
+	{
+		id: "dialogue",
+		name: "Dialogue",
+		icon: "messages-square",
+		credit: "Who is speaking: each line underlined in its speaker's colour, guesses dotted, narration faded.",
+		pos: [],
+		checks: ["dialoguePunct", "tagAdverb", "nonSpeechTag", "showyTag", "invertedTag", "twoSpeakers", "untaggedRun", "quotedThought"],
+		dialogue: true,
+	},
 ];
 
 export const activeLenses = (s: ProsePrinceSettings) => LENSES.filter((l) => s.lenses[l.id]);
 
 /** The union of the active lenses, before overrides. */
 export function fromLenses(s: ProsePrinceSettings): Effective {
-	const e: Effective = { pos: allOff(POS_CATEGORIES), checks: allOff(CHECK_KINDS), oozeMode: false, rhythm: false };
+	const e: Effective = { pos: allOff(POS_CATEGORIES), checks: allOff(CHECK_KINDS), oozeMode: false, rhythm: false, dialogue: false };
 	for (const l of activeLenses(s)) {
 		for (const p of l.pos) e.pos[p] = true;
 		for (const c of l.checks) e.checks[c] = true;
 		if (l.ooze) e.oozeMode = true;
 		if (l.rhythm) e.rhythm = true;
+		if (l.dialogue) e.dialogue = true;
 	}
 	return e;
 }
@@ -214,6 +244,7 @@ export function lensesFor(item: { pos: PosCategory } | { check: CheckKind } | "o
 /** "Adverbs (oozing), Dialogue-tag adverbs, Passive voice…": exactly what a lens turns on. */
 export function lensSummary(l: Lens): string {
 	const parts = [
+		...(l.dialogue ? ["Speakers in colour"] : []),
 		...(l.rhythm ? ["Sentence rhythm"] : []),
 		...l.pos.map((p) => (p === "ADV" && l.ooze ? "Adverbs (oozing red)" : POS_LABELS[p].replace(/ \(.*\)$/, ""))),
 		...l.checks.map((c) => CHECK_INFO[c].name),
@@ -242,6 +273,7 @@ function defaults(): ProsePrinceSettings {
 		worldNote: WORLD_NOTE_DEFAULT,
 		characterFolder: "",
 		folders: [],
+		dialogue: { dimNarration: true, highlightsInDialogue: false },
 		lookup: { enabled: false, apiKey: "", hoverCards: true, rightClick: true, hideRare: false, history: true },
 	};
 }

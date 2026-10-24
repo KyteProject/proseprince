@@ -1,4 +1,5 @@
 import { echoes, participles, partOfSpeech, stackedModifiers } from "./checks";
+import { dialogueLines } from "./dialogue/speech";
 import { maskInline } from "./mask";
 import { measure } from "./rhythm";
 import { mannerAdverbs } from "./rules/adverbs";
@@ -7,6 +8,7 @@ import { metaphors } from "./rules/metaphor";
 import { passive } from "./rules/passive";
 import { nominalizations, openers, weakVerbs } from "./rules/sentences";
 import { dialoguePunctuation } from "./rules/dialogue";
+import { dialogueConventions } from "./rules/dialogueConventions";
 import { cliches, intensity, redundancies } from "./rules/wordChoice";
 import { tag } from "./tagger";
 import type { ParagraphResult } from "./types";
@@ -18,7 +20,9 @@ import type { ParagraphResult } from "./types";
  */
 export function analyzeParagraph(text: string, echoWindow: number, names: readonly string[] = []): ParagraphResult {
 	const masked = maskInline(text);
-	const tokens = tag(masked, new Set(names));
+	const nameSet = new Set(names);
+	const tokens = tag(masked, nameSet);
+	const dialogue = dialogueLines(text, masked, tokens, nameSet);
 	const words = tokens.filter((t) => t.isWord);
 	const { sentences, stats } = measure(tokens);
 	const clicheHits = cliches(words);
@@ -41,8 +45,10 @@ export function analyzeParagraph(text: string, echoWindow: number, names: readon
 			...echoes(tokens, echoWindow),
 			...metaphorHits,
 			...dialoguePunctuation(masked),
+			...dialogueConventions(masked, tokens, dialogue),
 		],
 		sentences,
 		stats,
+		dialogue,
 	};
 }

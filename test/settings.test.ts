@@ -39,7 +39,7 @@ describe("stacking lenses", () => {
 
 	it("lists exactly what each lens turns on", () => {
 		const king = LENSES.find((l) => l.id === "king")!;
-		expect(lensSummary(king)).toBe("Adverbs (oozing red), Dialogue-tag adverbs, Passive voice, Qualifiers, Filler words");
+		expect(lensSummary(king)).toBe("Adverbs (oozing red), Dialogue-tag adverbs, Passive voice, Qualifiers, Filler words, Tags that can't speak, Showy tags");
 	});
 });
 

@@ -337,6 +337,27 @@ export class ProsePrinceSettingTab extends PluginSettingTab {
 					await save();
 				}));
 
+		// ── Dialogue ───────────────────────────────────────────────────────────
+		new Setting(containerEl).setName("Dialogue").setHeading();
+		new Setting(containerEl)
+			.setName("Highlights inside dialogue")
+			.setDesc("Craft and part-of-speech highlights inside quoted speech and thought. Off by default: characters don't talk like Le Guin. Dialogue punctuation and tag adverbs still show. Switch on for an edit pass; the status-bar menu has it too.")
+			.addToggle((t) => t.setValue(s.dialogue.highlightsInDialogue).onChange(async (v) => {
+				s.dialogue.highlightsInDialogue = v;
+				await save();
+			}));
+		new Setting(containerEl)
+			.setName("Dim narration under the Dialogue lens")
+			.setDesc("Fade everything that isn't speech, so the conversation reads first.")
+			.addToggle((t) => t.setValue(s.dialogue.dimNarration).onChange(async (v) => {
+				s.dialogue.dimNarration = v;
+				await save();
+			}));
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: "The Dialogue lens underlines each line in its speaker's colour, from a tag (\"Linh said\", \"the inspector said\"), an action beat, or turn-taking in a two-person exchange; guesses are dotted grey. Hover a line to see why, or to pin the speaker with a hidden %% speaker: Name %% comment. Set a colour with colour: #hex on a character note.",
+		});
+
 		// ── Word lookups (online) ──────────────────────────────────────────────
 		new Setting(containerEl).setName("Word lookups (online)").setHeading();
 		containerEl.createEl("p", {

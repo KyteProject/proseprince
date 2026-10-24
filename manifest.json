@@ -1,7 +1,7 @@
 {
 	"id": "proseprince",
 	"name": "ProsePrince",
-	"version": "0.9.2",
+	"version": "0.13.0",
 	"minAppVersion": "1.5.0",
 	"description": "Fiction-focused prose highlighting: parts of speech, filter words, and craft lenses inspired by Stephen King and Ursula K. Le Guin. Offline by default, with optional online word lookups.",
 	"author": "Dan",
