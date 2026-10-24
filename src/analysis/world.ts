@@ -60,15 +60,31 @@ export function parseWorld(markdown: string): World {
 		const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(raw);
 		const line = item ? item[1]! : seenHeading ? raw : "";
 		if (!section || line.trim() === "" || line.trim().startsWith(">")) continue;
-		const entry = line.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target)
-			.replace(/[*_`]/g, "")
-			.split(/:\s| [—–-] /)[0]!;
-		for (const part of entry.split(/[|,]/)) {
-			const value = part.replace(/\(.*?\)/g, "").trim();
-			if (value) world[section].add(value);
-		}
+		for (const value of entryValues(line)) world[section].add(value);
 	}
 	return world;
+}
+
+/** The names in one entry: links unwrapped, the writer's note dropped, aliases split out. */
+function entryValues(line: string): string[] {
+	const entry = line.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target)
+		.replace(/[*_`]/g, "")
+		.split(/:\s| [—–-] /)[0]!;
+	return entry.split(/[|,]/).map((part) => part.replace(/\(.*?\)/g, "").trim()).filter(Boolean);
+}
+
+/**
+ * The section of a world note that already holds an entry, or any of its aliases, ignoring case
+ * ("effie" is found in `- Eufemie | Effie: Shin's mother`). Null when the entry is new.
+ */
+export function findInWorld(markdown: string, entry: string): keyof World | null {
+	const wanted = new Set(entryValues(entry).map((v) => v.toLowerCase()));
+	if (wanted.size === 0) return null;
+	const world = parseWorld(markdown);
+	for (const section of ["names", "places", "terms"] as const) {
+		for (const value of world[section]) if (wanted.has(value.toLowerCase())) return section;
+	}
+	return null;
 }
 
 /** Single capitalised words to tag as proper nouns ("Effie Kanda" → "Effie", "Kanda"). */

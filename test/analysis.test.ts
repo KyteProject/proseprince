@@ -4,7 +4,7 @@ import { filterHighlights } from "../src/analysis/filter";
 import { dialogueRanges, excludedBlocks, maskInline } from "../src/analysis/mask";
 import { looksLikeNameTitle, namesIn, namesInText } from "../src/analysis/names";
 import { tag } from "../src/analysis/tagger";
-import { parseWorld, properNounWords } from "../src/analysis/world";
+import { findInWorld, parseWorld, properNounWords } from "../src/analysis/world";
 import type { CheckKind, Highlight } from "../src/analysis/types";
 
 const texts = (text: string, highlights: Highlight[], check: CheckKind) =>
@@ -314,6 +314,46 @@ Some intro text that is not an entry.
 	});
 	it("splits multi-word entries into proper-noun words", () => {
 		expect([...properNounWords(["the Farm", "Effie Kanda", "The Mother"])]).toEqual(["Farm", "Effie", "Kanda", "Mother"]);
+	});
+});
+
+describe("findInWorld", () => {
+	const note = `## Names
+- Eufemie | Effie: Shin's mother
+- [[20.1 The Survivor|Shin]]
+- Tien
+
+## Places
+- the Farm — where the processing happens
+
+## Terms
+- crop, precursor
+`;
+	it("finds existing entries, ignoring case", () => {
+		expect(findInWorld(note, "Tien")).toBe("names");
+		expect(findInWorld(note, "tien")).toBe("names");
+		expect(findInWorld(note, "  Tien ")).toBe("names");
+	});
+	it("finds aliases after a pipe or comma and ignores the writer's note", () => {
+		expect(findInWorld(note, "Effie")).toBe("names");
+		expect(findInWorld(note, "Eufemie")).toBe("names");
+		expect(findInWorld(note, "precursor")).toBe("terms");
+		expect(findInWorld(note, "Shin's mother")).toBeNull();
+	});
+	it("looks across every section", () => {
+		expect(findInWorld(note, "The Farm")).toBe("places");
+		expect(findInWorld(note, "Shin")).toBe("names");
+	});
+	it("matches when any alias of the new entry exists", () => {
+		expect(findInWorld(note, "Tien | Ti")).toBe("names");
+		expect(findInWorld(note, "Effie: nickname")).toBe("names");
+	});
+	it("returns null for new entries and partial words", () => {
+		expect(findInWorld(note, "Kanda")).toBeNull();
+		expect(findInWorld(note, "Tie")).toBeNull();
+		expect(findInWorld(note, "Farm")).toBeNull();
+		expect(findInWorld(note, "")).toBeNull();
+		expect(findInWorld("", "Tien")).toBeNull();
 	});
 });
 
