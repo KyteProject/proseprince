@@ -348,7 +348,10 @@ export default class ProsePrincePlugin extends Plugin {
 	}
 
 	private async addToWorld(section: WorldSection, entry: string): Promise<void> {
-		await this.world.add(section, entry);
+		if (!(await this.world.add(section, entry))) {
+			new Notice(`ProsePrince: "${entry}" is already in the world note`);
+			return;
+		}
 		await this.world.rebuild();
 		this.refreshEditors();
 		new Notice(`ProsePrince: added "${entry}" to ${section} in ${this.world.worldNotePath}`);

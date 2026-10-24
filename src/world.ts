@@ -1,6 +1,6 @@
 import { type App, normalizePath, TFile } from "obsidian";
 import { looksLikeNameTitle } from "./analysis/names";
-import { emptyWorld, parseWorld, properNounWords, type World, WORLD_TEMPLATE } from "./analysis/world";
+import { emptyWorld, findInWorld, parseWorld, properNounWords, type World, WORLD_TEMPLATE } from "./analysis/world";
 import { WORLD_NOTE_DEFAULT } from "./settingsModel";
 
 export type WorldSection = keyof World;
@@ -74,11 +74,13 @@ export class WorldIndex {
 		await this.app.workspace.getLeaf(true).openFile(file);
 	}
 
-	/** Add an entry under a section of the World note. */
-	async add(section: WorldSection, entry: string): Promise<void> {
+	/** Add an entry under a section of the World note. Returns false when it is already there (in any section). */
+	async add(section: WorldSection, entry: string): Promise<boolean> {
 		const file = await this.ensureNote();
 		const heading = { names: "Names", places: "Places", terms: "Terms" }[section];
+		let added = false;
 		await this.app.vault.process(file, (text) => {
+			if (findInWorld(text, entry)) return text;
 			const lines = text.split("\n");
 			let at = lines.findIndex((l) => new RegExp(`^#{1,6}\\s+${heading}\\s*$`, "i").test(l));
 			if (at === -1) {
@@ -91,8 +93,10 @@ export class WorldIndex {
 			let insertAt = end;
 			while (insertAt > at + 1 && lines[insertAt - 1]!.trim() === "") insertAt--;
 			lines.splice(insertAt, 0, `- ${entry}`);
+			added = true;
 			return lines.join("\n");
 		});
+		return added;
 	}
 
 	private async ensureNote(): Promise<TFile> {
