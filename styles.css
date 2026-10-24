@@ -1,6 +1,6 @@
 /* ProsePrince: parts of speech colour the text; craft checks tint the background; sentence
-   rhythm is a fainter tint behind whole sentences. Underlines stay free for grammar checkers
-   such as Harper or LanguageTool. */
+   rhythm is a fainter tint behind whole sentences. The Dialogue lens underlines speech in each
+   speaker's colour, set lower and thicker than the wavy lines of grammar checkers such as Harper. */
 
 body {
 	--pp-adj: #b07400;
@@ -38,6 +38,12 @@ body {
 	--pp-metaphor: rgba(212, 172, 13, 0.2);
 	/* dialogue */
 	--pp-dialogue-punct: rgba(255, 99, 71, 0.32);
+	--pp-non-speech-tag: rgba(214, 48, 49, 0.22);
+	--pp-showy-tag: rgba(225, 112, 85, 0.16);
+	--pp-inverted-tag: rgba(9, 132, 227, 0.16);
+	--pp-two-speakers: rgba(232, 67, 147, 0.2);
+	--pp-untagged-run: rgba(108, 92, 231, 0.16);
+	--pp-quoted-thought: rgba(0, 184, 148, 0.18);
 
 	/* rhythm: short (cool) to long (warm) */
 	--pp-rhythm-1: rgba(52, 152, 219, 0.1);
@@ -46,9 +52,23 @@ body {
 	--pp-rhythm-4: rgba(241, 196, 15, 0.12);
 	--pp-rhythm-5: rgba(230, 126, 34, 0.12);
 	--pp-rhythm-6: rgba(231, 76, 60, 0.12);
+
+	/* speakers (Dialogue lens): six well-separated hues, none of them red (red reads as an error) */
+	--pp-speaker-0: #c27c00;
+	--pp-speaker-1: #2a9d4b;
+	--pp-speaker-2: #12919a;
+	--pp-speaker-3: #2f6fd6;
+	--pp-speaker-4: #8a4fd8;
+	--pp-speaker-5: #c2409a;
 }
 
 body.theme-dark {
+	--pp-speaker-0: #f9c46b;
+	--pp-speaker-1: #8fdc8a;
+	--pp-speaker-2: #6fd6dd;
+	--pp-speaker-3: #7fa8ff;
+	--pp-speaker-4: #c6a0ff;
+	--pp-speaker-5: #f590d4;
 	--pp-adj: #f0b450;
 	--pp-adv: #c39bd3;
 	--pp-noun: #7fb8e8;
@@ -78,6 +98,12 @@ body.theme-dark {
 	--pp-echo: rgba(241, 148, 138, 0.24);
 	--pp-metaphor: rgba(240, 205, 70, 0.22);
 	--pp-dialogue-punct: rgba(255, 120, 95, 0.34);
+	--pp-non-speech-tag: rgba(255, 107, 107, 0.26);
+	--pp-showy-tag: rgba(250, 160, 120, 0.2);
+	--pp-inverted-tag: rgba(116, 185, 255, 0.2);
+	--pp-two-speakers: rgba(253, 121, 168, 0.24);
+	--pp-untagged-run: rgba(162, 155, 254, 0.2);
+	--pp-quoted-thought: rgba(85, 239, 196, 0.2);
 
 	--pp-rhythm-1: rgba(93, 173, 226, 0.12);
 	--pp-rhythm-2: rgba(72, 201, 176, 0.12);
@@ -117,6 +143,12 @@ body.theme-dark {
 .pp-check-metaphor { background-color: var(--pp-metaphor); }
 /* Dialogue punctuation marks a single character, so give it a little width and an outline. */
 .pp-check-dialogue-punct { background-color: var(--pp-dialogue-punct); outline: 1px solid var(--pp-dialogue-punct); padding: 0 1px; }
+.pp-check-non-speech-tag { background-color: var(--pp-non-speech-tag); }
+.pp-check-showy-tag { background-color: var(--pp-showy-tag); }
+.pp-check-inverted-tag { background-color: var(--pp-inverted-tag); }
+.pp-check-two-speakers { background-color: var(--pp-two-speakers); }
+.pp-check-untagged-run { background-color: var(--pp-untagged-run); }
+.pp-check-quoted-thought { background-color: var(--pp-quoted-thought); }
 
 .pp-rhythm { border-radius: 2px; }
 .pp-rhythm-1 { background-color: var(--pp-rhythm-1); }
@@ -208,6 +240,12 @@ body.theme-dark {
 .pp-setting-check-echo .setting-item-name { background: var(--pp-echo); }
 .pp-setting-check-metaphor .setting-item-name { background: var(--pp-metaphor); }
 .pp-setting-check-dialoguePunct .setting-item-name { background: var(--pp-dialogue-punct); }
+.pp-setting-check-nonSpeechTag .setting-item-name { background: var(--pp-non-speech-tag); }
+.pp-setting-check-showyTag .setting-item-name { background: var(--pp-showy-tag); }
+.pp-setting-check-invertedTag .setting-item-name { background: var(--pp-inverted-tag); }
+.pp-setting-check-twoSpeakers .setting-item-name { background: var(--pp-two-speakers); }
+.pp-setting-check-untaggedRun .setting-item-name { background: var(--pp-untagged-run); }
+.pp-setting-check-quotedThought .setting-item-name { background: var(--pp-quoted-thought); }
 .pp-setting-check-cliche .setting-item-name,
 [class*="pp-setting-check-"] .setting-item-name { display: inline-block; padding: 0 4px; border-radius: 3px; }
 
@@ -287,3 +325,30 @@ body.theme-dark {
 .pp-pairing-yours { color: var(--text-normal, inherit); font-weight: 600; outline: 1px solid var(--text-accent, currentColor); }
 .pp-lookup-sound > summary { cursor: pointer; }
 .pp-lookup-sound .pp-lookup-section { margin-top: 4px; }
+
+/* Dialogue lens: speech underlined in its speaker's colour; guesses dotted grey; thought dashed. */
+.pp-speech {
+	text-decoration-line: underline;
+	text-decoration-color: var(--pp-speaker, var(--text-faint, #999));
+	text-decoration-thickness: 2px;
+	text-underline-offset: 0.32em;
+	text-decoration-skip-ink: none;
+}
+.pp-speech-guess {
+	text-decoration-style: dotted;
+	text-decoration-color: var(--text-faint, #999);
+}
+.pp-thought {
+	text-decoration-line: underline;
+	text-decoration-style: dashed;
+	text-decoration-color: var(--text-faint, #999);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.32em;
+}
+.pp-narration { opacity: 0.58; }
+
+/* Speaker card. */
+.pp-speaker-head { display: flex; align-items: center; gap: 6px; }
+.pp-speaker-dot { width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--pp-speaker, var(--text-faint, #999)); flex: none; }
+.pp-speaker-dot.pp-guess { background: none; border: 1.5px dotted var(--text-faint, #999); }
+.pp-speaker-chip { display: inline-flex; align-items: center; gap: 5px; }

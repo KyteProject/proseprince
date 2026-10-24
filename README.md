@@ -17,7 +17,7 @@ It is meant to sit **after** a grammar checker. Let [Harper](https://writewithha
 | Sentences | **Weak verbs** (long sentences carried only by "to be"), **nominalisations** (made a decision → decided), **repeated openers** |
 | Modifiers | **Stacked modifiers** (the silky green liquid), **verb forms as adjectives** (his frayed mind) |
 | Repetition and imagery | **Echoes** (same word, any form, within a window), **metaphor candidates** (dead metaphors; concrete words on abstract ones, e.g. "velvet silence") |
-| Dialogue | **Dialogue punctuation**, mechanical slips only: a missing comma before a tag (`"…new" she mused`), a full stop or capital where a tag joins its line, `?".` endings, two-dot ellipses, a speech tag split from its line across paragraphs |
+| Dialogue | **Tags that can't speak** ("Fine," she smiled), **showy tags** (hissed, scoffed: a hint), **inverted tags** ("said Linh", "replied his father"; a long subject may invert), **two speakers in a paragraph**, **long untagged runs** (every fifth line with no tag or beat), **thought conventions** (thought in quote marks, "thought to himself"). **Dialogue punctuation**: commas and full stops outside the quotes, mismatched quote marks ('What?"), and mechanical slips: a missing comma before a tag (`"…new" she mused`), a full stop or capital where a tag joins its line, `?".` endings, two-dot ellipses, a speech tag split from its line across paragraphs |
 
 Filler, qualifiers, weasels, hedges, filter words, passives and adverbs are checked in narration only; dialogue is a character's voice.
 
@@ -32,12 +32,28 @@ Filler, qualifiers, weasels, hedges, filter words, passives and adverbs are chec
 | Lens | Turns on |
 |---|---|
 | **Style checks** | Every word-choice, voice, sentence and dialogue check |
-| **King lens** (after *On Writing*) | Adverbs oozing red, dialogue-tag adverbs, passive voice, qualifiers, filler |
+| **King lens** (after *On Writing*) | Adverbs oozing red, dialogue-tag adverbs, passive voice, qualifiers, filler, tags that can't speak, showy tags |
 | **Le Guin lens** (after *Steering the Craft*) | Sentence rhythm, adjectives, adverbs, qualifiers, stacked modifiers, verb forms as adjectives, echoes, repeated openers |
 | **Parts of speech** | Every part of speech in its own colour |
 | **Rhythm** | Sentence-length tints |
+| **Dialogue** | Speakers in colour (underlines), narration faded, and every dialogue check |
 
 Below the lenses, every part of speech and check has its own toggle showing the combined result and where it comes from ("On via King lens"). Flipping one overrides the lenses for that item only ("Your change", with a reset button); "Reset your changes" clears them all.
+
+## Dialogue
+
+**Highlights inside dialogue** are off by default: characters don't talk like Le Guin, so craft and part-of-speech highlights inside quoted speech and thought are hidden (dialogue punctuation and tag adverbs still show). Switch them on for an edit pass from the status-bar menu, the *Toggle highlights inside dialogue* command, or settings.
+
+The **Dialogue lens** shows who is speaking. Each line is underlined in its speaker's colour, guesses dotted grey, thought dashed, and narration fades (toggle *Dim narration*). The speaker comes from, in order:
+
+1. your pin: a hidden `%% speaker: Linh %%` comment in the paragraph;
+2. a tag: "Linh said", "said Linh", "the inspector said", "replied his father" (described speakers count);
+3. an action beat: the narration has exactly one person doing something ("Linh set down his cup.");
+4. turn-taking: in a two-person exchange an untagged line goes to whoever spoke before the last line. This is a guess, so it's dotted; it reaches back two narration paragraphs and resets at headings and scene breaks (`***`).
+
+Each line counts as its own turn, so a conversation written one speaker per line, without blank lines between, works too. "She said" is resolved from the scene: when the narration names one person and carries on with "she" ("Shaddid leaned back. She looked tired."), *she* means Shaddid until the next scene break or a long stretch of narration; and in a he/she exchange, once one pronoun is known the other is the other person. Otherwise it takes the turn-taking answer. With only one named speaker, untagged lines alternate between them and the unnamed other. A paragraph that tags two people leaves its untagged lines unattributed.
+
+Hover a line for who and why, to pin a speaker, or to mark quotes as *Not speech*. Titles are dropped ("Captain Shaddid" is Shaddid). Aliases count as one speaker, described ones too: `- Eufemie | Effie` or `- Shaddid | the captain` in the World note, or a character note's `aliases`. Each speaker keeps the same colour as the cast grows (six colours, none of them red), and `colour: #hex` on a character note sets one by hand.
 
 ## Where it runs
 
