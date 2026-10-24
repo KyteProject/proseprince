@@ -394,8 +394,13 @@ body.theme-dark {
 .pp-beat-opening { color: var(--text-muted); font-style: italic; }
 .pp-beat-words { color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .pp-beat-issues { color: var(--text-on-accent); background: var(--interactive-accent); border-radius: 8px; padding: 0 5px; font-size: var(--font-ui-smaller); }
-.pp-beat-bar { height: 4px; margin-top: 3px; border-radius: 2px; background: var(--background-modifier-border); overflow: hidden; }
+.pp-beat-track { margin-top: 3px; height: 4px; }
+.pp-beat-track.has-target { border-radius: 2px; background: var(--background-modifier-border); }
+.pp-beat-bar { height: 4px; border-radius: 2px; background: var(--text-faint); overflow: hidden; }
+.pp-beat-track.has-target .pp-beat-bar { background: var(--interactive-accent); }
+.pp-beat-track.has-target .pp-beat-bar.is-over { background: var(--color-orange, #e58e26); }
 .pp-beat-speech { height: 100%; background: var(--text-muted); }
+.pp-beat-track.has-target .pp-beat-speech { background: color-mix(in srgb, var(--interactive-accent) 55%, var(--text-normal)); }
 
 .pp-rhythm-spark { display: flex; align-items: flex-end; gap: 1px; height: 40px; }
 .pp-spark-bar { flex: 1 1 0; min-width: 1px; max-width: 8px; border-radius: 1px 1px 0 0; cursor: pointer; opacity: 0.75; }
@@ -412,3 +417,10 @@ body.theme-dark {
 .pp-outline-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .pp-outline-toggle { margin-left: auto; font-size: var(--font-ui-smaller); padding: 0 6px; height: auto; text-transform: none; letter-spacing: 0; }
 .pp-outline-button { margin-top: 8px; font-size: var(--font-ui-small); }
+.pp-beat-who { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 1px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.pp-who-speaks { color: var(--text-normal); }
+.pp-who-speaks::before { content: "● "; font-size: 0.8em; color: var(--interactive-accent); }
+.pp-who-present::before { content: "○ "; font-size: 0.8em; }
+.pp-who-missing { color: var(--color-orange, #e58e26); text-decoration: underline dotted; text-underline-offset: 2px; }
+.pp-who-described { font-style: italic; color: var(--text-faint); }
+.pp-who-unlisted { color: var(--color-orange, #e58e26); font-style: italic; }

@@ -234,3 +234,16 @@ describe("voices", () => {
 		expect(longestStretches([false, true, false])).toEqual([]);
 	});
 });
+
+describe("a beat's who: line", () => {
+	it("names the other person in a two-person scene, as a guess", () => {
+		const paragraphs = units([`"Morning," Linh said.`, `"Hey, how did you sleep?"`, `"Badly."`], ["Linh"]).map((u) => ({ ...u, cast: ["Linh", "Ruoi"] }));
+		const result = attribute(paragraphs).flat().map((a) => `${a.speaker ?? "?"}/${a.how ?? "-"}${a.certain ? "" : "~"}`);
+		expect(result).toEqual(["Linh/tag", "Ruoi/turns~", "Linh/turns~"]);
+	});
+
+	it("can't name the other person when three are present", () => {
+		const paragraphs = units([`"Morning," Linh said.`, `"Hey."`], ["Linh"]).map((u) => ({ ...u, cast: ["Linh", "Ruoi", "Tien"] }));
+		expect(attribute(paragraphs).flat().map((a) => a.speaker)).toEqual(["Linh", null]);
+	});
+});
