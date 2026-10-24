@@ -1,4 +1,5 @@
 import { ECHO_STOP_LEMMAS, NOT_PARTICIPLES, POSSESSIVES } from "./wordlists";
+import { headOf } from "./rules/common";
 import type { Highlight, PosCategory, Token, UposTag } from "./types";
 
 const POS_TO_CATEGORY: Partial<Record<UposTag, PosCategory>> = {
@@ -58,6 +59,8 @@ export function stackedModifiers(tokens: Token[]): Highlight[] {
 				to: modifiers[modifiers.length - 1]!.to,
 				kind: { check: "stackedModifier" },
 				note: `${modifiers.length} modifiers on "${head.text}".`,
+				// wink sometimes takes the -ing verb after the noun for the head ("liquid pooling"); no pairing then.
+				...(/ing$/i.test(head.text) ? {} : { pairing: { noun: head.lemma.toLowerCase(), modifiers: modifiers.map((m) => m.normal) } }),
 			});
 		}
 		i = j;
@@ -143,10 +146,17 @@ export function echoes(tokens: Token[], window: number): Highlight[] {
 		}
 		lastSeen.set(t.lemma, index);
 	});
+	const words = tokens.filter((t) => t.isWord);
 	return [...flagged]
 		.sort((a, b) => a - b)
 		.map((index) => {
 			const t = content[index]!;
-			return { from: t.from, to: t.to, kind: { check: "echo" as const }, note: `"${t.lemma}" is repeated nearby.` };
+			return {
+				from: t.from,
+				to: t.to,
+				kind: { check: "echo" as const },
+				note: `"${t.lemma}" is repeated nearby.`,
+				lookup: { mode: "word" as const, query: t.lemma, head: headOf(words, words.indexOf(t)), replace: { from: t.from, to: t.to } },
+			};
 		});
 }

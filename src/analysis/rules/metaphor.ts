@@ -65,10 +65,10 @@ export function metaphors(words: Token[], tokens: Token[]): Highlight[] {
 	deadOpen ??= new PhraseMatcher(DEAD_METAPHORS_OPEN.map((p) => [p, p] as const));
 	const out: Highlight[] = [];
 	const claimed: [number, number][] = [];
-	const claim = (from: number, to: number, note: string) => {
+	const claim = (from: number, to: number, note: string, pairing?: Highlight["pairing"]) => {
 		if (claimed.some(([a, b]) => from < b && to > a)) return;
 		claimed.push([from, to]);
-		out.push({ from, to, kind: { check: "metaphor" }, note });
+		out.push({ from, to, kind: { check: "metaphor" }, note, ...(pairing ? { pairing } : {}) });
 	};
 	const deadNote = (p: string) => `Dead metaphor: "${p}". The image has worn off; say it plainly or find a live one.`;
 
@@ -116,7 +116,7 @@ export function metaphors(words: Token[], tokens: Token[]): Highlight[] {
 			if (!n || n.sentence !== t.sentence || breaks.has(n) || !isCandidateNoun(n)) continue;
 			const ns = score(n);
 			if (ns === null || ns > T.abstractMax || ms - ns < T.minGap) continue;
-			claim(t.from, n.to, note(t, n, t.pos === "ADJ" ? "adjective" : "modifier"));
+			claim(t.from, n.to, note(t, n, t.pos === "ADJ" ? "adjective" : "modifier"), { noun: n.lemma.toLowerCase(), modifiers: [t.normal] });
 		}
 	}
 	return out.sort((a, b) => a.from - b.from);

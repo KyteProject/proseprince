@@ -2,7 +2,7 @@
 
 ## Warning: This is a 100% LLM generated tool for personal use
 
-Fiction-focused prose highlighting for Obsidian, entirely offline: no server, no network calls.
+Fiction-focused prose highlighting for Obsidian, offline by default: no server, and no network calls unless you switch on the optional [word lookups](#word-lookups-optional-online).
 
 It is meant to sit **after** a grammar checker. Let [Harper](https://writewithharper.com/docs/integrations/obsidian) (offline) or a self-hosted LanguageTool handle spelling and grammar with underlines; ProsePrince uses text colour and background tints so the two layers don't clash. (Harper's own filler, hedge and "boring word" lints cover a handful of words; ProsePrince's lists are far larger and tuned for fiction.)
 
@@ -57,6 +57,36 @@ Names and places are tagged as proper nouns and never count as echoes. Terms (yo
 
 Each hover card has a closed **How to approach this** drawer under the note. It holds hand-written guidance for that kind of finding: the principle, one or two invented before → after examples, and when to keep the original. Nothing is generated (it's all static text in the plugin, no AI, no network) and your own sentences are never rewritten. Hide the drawer entirely in settings if you prefer.
 
+## Word lookups (optional, online)
+
+Off unless you switch it on in Settings → **Word lookups (online)**. Then right-click a word for **ProsePrince: look up "…"** (or use the *Look up word at cursor* command) to open a small card with:
+
+- its **meaning**, in the part of speech it has in your sentence first;
+- **synonyms** and **more specific** words (walk → saunter, stride, trudge), filtered to the same part of speech; hover one for its definition;
+- for a noun, the adjectives **usually** used with it (and for an adjective, the nouns it usually describes);
+- a closed **Sound** drawer with rhymes and near rhymes, fetched only when you open it;
+- **Open in OneLook ↗** for a deeper search.
+
+**Words to try in hover cards**: once a card has stayed open a moment, adverbs, qualifiers, nominalisations and echoes get a short row of single words, each with its definition on hover:
+
+| Finding | Row |
+|---|---|
+| "walked slowly" | *One verb instead:* strolled, sauntered, meandered; *Other ways to walk:* strode, trudged, plodded, paced… (kinds of the verb whose definition uses it) |
+| "she said softly" | *One verb instead:* whispered, murmured, muttered, with King's reminder that "said" is nearly invisible |
+| "very tired" | *One word instead:* exhausted, drained, spent, weary |
+| "made a decision" | *As a verb:* decided, chose, concluded |
+| an echoed "cold" | *Other words:* frigid, cool, crisp… |
+
+Stacked modifiers and metaphor candidates show **usual words** for the noun instead, with yours marked: "dead silence" sits among the most common adjectives for *silence* (long, dead, complete, profound…), so readers glide past it; "velvet silence" doesn't, so it will be noticed. Nothing is suggested there: whether the pairing earns its place is your call.
+
+Picking one replaces the pair: "walked slowly" → "strolled", "Slowly, she walked" → "She strolled", "very tired" → "exhausted". A short craft reminder sits under each row whichever lenses are on, because the list is a menu, not an instruction.
+
+In the lookup card, click a word (or use the arrow keys and Enter) to replace the original. The replacement keeps its form and capitals ("Walked" + stride → "Strode", "doors" + gate → "gates", British spellings such as *travelled*), and one undo restores it. Select a short phrase to look up the phrase instead.
+
+What goes online: only the word (or selected phrase) you look up, sent to [Datamuse](https://www.datamuse.com/api/), the engine behind OneLook's thesaurus. Your text never leaves the vault. Answers are saved in the plugin folder (`lookup-cache.json`) for six months, so repeat lookups stay offline; offline, the card says so and nothing else changes. Datamuse is free without a key until 1 February 2027, when it starts requiring one; there's a field for it in settings.
+
+**Lookup history** (on by default, per vault) records which words you look up and what you replace them with, in `lookup-history.json`. It's never shown in the card. Settings shows it as **Your lookups**: the words you look up most, the words you replace most and what you chose instead, and which checks your replacements came from. Switch it off or clear it there.
+
 ## "Not here"
 
 Hovering a highlight shows its note and a button such as *Not a cliché here*. It appends a hidden comment like `%% not cliche %%` to the paragraph, which switches that check off there. Obsidian doesn't render `%%` comments, and they're ignored by the tagger. Delete the comment to switch the check back on.
@@ -86,7 +116,7 @@ idle → analyse the rest of the note (cached) → note-level readability
 - **Phrase matching**: lexicon phrases are tokenised by the same tagger and stored in a trie keyed by word stems from lemmas, so one entry covers every tense and irregular form; any possessive matches any other ("ace up your/his sleeve"); leading articles are optional; longest match wins; matches never cross a sentence.
 - **Whole paragraphs, cached**: unchanged paragraphs are never re-tagged, sentences at the screen edge keep their context, and toggles re-filter cached results instantly.
 
-Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rules/`, lexicons in `lexicon/`, rhythm and readability; pure and unit-tested), `src/worker`, `src/editor` (paragraphs, cache, CodeMirror extension with hover cards), `src/settings*.ts`, `src/main.ts`.
+Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rules/`, lexicons in `lexicon/`, rhythm and readability; pure and unit-tested), `src/worker`, `src/editor` (paragraphs, cache, CodeMirror extension with hover cards), `src/lookup` (optional online lookups: Datamuse queries, ranking, re-inflection, cache, popover), `src/settings*.ts`, `src/main.ts`.
 
 ## Known limits
 
@@ -103,7 +133,7 @@ Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rule
 
 ## Credits
 
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): wink-nlp; Creative Writer (lexicons and rule designs); no-cliches / write-good (clichés); Titus Wormer's fillers, weasels and hedges lists; Brysbaert, Warriner & Kuperman's concreteness norms (CC BY 4.0).
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): wink-nlp; Creative Writer (lexicons and rule designs); no-cliches / write-good (clichés); Titus Wormer's fillers, weasels and hedges lists; Brysbaert, Warriner & Kuperman's concreteness norms (CC BY 4.0); Datamuse and Wiktionary (CC BY-SA) for the optional lookups.
 
 ## License
 

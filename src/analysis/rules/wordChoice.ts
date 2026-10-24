@@ -4,7 +4,8 @@ import { CLICHES_WRITE_GOOD } from "../lexicon/clichesWriteGood";
 import { FILLERS, HEDGES, QUALIFIERS, WEASELS } from "../lexicon/intensity";
 import { REDUNDANCIES } from "../lexicon/redundancies";
 import { PhraseMatcher, type PhraseMatch } from "../phrases";
-import type { CheckKind, Highlight, Token } from "../types";
+import type { CheckKind, Highlight, LookupHint, Token } from "../types";
+import { headOf } from "./common";
 
 type Matcher = PhraseMatcher<CheckKind>;
 let matchers: { cliche: Matcher; redundancy: Matcher; intensity: Matcher } | null = null;
@@ -64,7 +65,7 @@ export function redundancies(words: Token[]): Highlight[] {
  * and "a bit"/"a little" only qualify when they modify something ("a little cold", not "a little dog").
  */
 export function intensity(words: Token[]): Highlight[] {
-	return getMatchers()
+	const matches = getMatchers()
 		.intensity.findAll(words, (m) => {
 			const first = words[m.start]!;
 			if (first.inDialogue) return false;
@@ -76,6 +77,20 @@ export function intensity(words: Token[]): Highlight[] {
 			if (phrase === "pretty@ADV" && !(next && ["ADJ", "ADV"].includes(next.pos))) return false;
 			if (phrase === "too@ADV" && !(next && ["ADJ", "ADV"].includes(next.pos))) return false;
 			return true;
-		})
-		.map((m) => toHighlight(m, words));
+		});
+	return matches.map((m) => {
+		const h = toHighlight(m, words);
+		const hint = m.entry.value === "qualifier" ? qualifierHint(words, m.start, m.end) : undefined;
+		return hint ? { ...h, lookup: hint } : h;
+	});
+}
+
+/** "very cold": one word for the pair (freezing, frigid). The pick replaces both. */
+function qualifierHint(words: Token[], start: number, end: number): LookupHint | undefined {
+	const first = words[start]!;
+	const last = words[end - 1]!;
+	const next = words[end];
+	if (!next || next.sentence !== first.sentence || next.from - last.to > 1 || (next.pos !== "ADJ" && next.pos !== "ADV")) return undefined;
+	const qualifier = words.slice(start, end).map((t) => t.normal).join(" ");
+	return { mode: "phrase", query: `${qualifier} ${next.lemma}`, head: headOf(words, end), replace: { from: first.from, to: next.to } };
 }

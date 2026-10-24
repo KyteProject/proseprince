@@ -1,7 +1,27 @@
 // Rule design adapted from Creative Writer's AdverbRule (MIT), retargeted to wink-nlp tags.
 import { DIALOGUE_TAGS, LY_NOT_ADVERB, STRUCTURAL_ADVERBS } from "../lexicon/adverbExceptions";
 import type { Highlight, Token } from "../types";
-import { looksLikeName, lower } from "./common";
+import { looksLikeName, lower, pairHint } from "./common";
+
+/** How far from the adverb to look for the verb it modifies. */
+const VERB_REACH = 4;
+
+/** The verb an adverb leans on: just before it ("walked slowly"), a little earlier, or after a fronted adverb ("Slowly, she walked"). */
+function verbFor(words: Token[], i: number): number {
+	const tok = words[i]!;
+	for (let j = i - 1; j >= Math.max(0, i - VERB_REACH); j--) {
+		const t = words[j]!;
+		if (t.sentence !== tok.sentence) break;
+		if (t.pos === "VERB") return j;
+	}
+	if (!tok.startsSentence) return -1;
+	for (let j = i + 1; j <= Math.min(words.length - 1, i + VERB_REACH); j++) {
+		const t = words[j]!;
+		if (t.sentence !== tok.sentence) break;
+		if (t.pos === "VERB") return j;
+	}
+	return -1;
+}
 
 /** Pronoun that may sit between a dialogue tag and its adverb: "she told him gently". */
 const TAG_OBJECT = /^(him|her|them|me|us|it)$/;
@@ -33,12 +53,27 @@ export function mannerAdverbs(words: Token[]): Highlight[] {
 			words.some((o) => o.sentence === tok.sentence && o.inDialogue);
 		const onTag = fronted || (quoteInSentence && tagTok !== undefined && DIALOGUE_TAGS.has(lower(tagTok)));
 		if (onTag) {
-			out.push({ from: tok.from, to: tok.to, kind: { check: "tagAdverb" }, note: `Adverb on a dialogue tag. Let the line itself carry the "${w}".` });
+			const tagIndex = fronted ? i + 2 : words.indexOf(tagTok!);
+			const tag = words[tagIndex]!;
+			out.push({
+				from: tok.from,
+				to: tok.to,
+				kind: { check: "tagAdverb" },
+				note: `Adverb on a dialogue tag. Let the line itself carry the "${w}".`,
+				lookup: pairHint(words, tagIndex, i, `${tag.lemma} ${w}`),
+			});
 		} else {
 			const note = prevTok && prevTok.to === tok.from - 1
 				? `Adverb. Is there a verb that already means "${prev} ${w}"?`
 				: `Adverb. Is there a verb that already carries "${w}"?`;
-			out.push({ from: tok.from, to: tok.to, kind: { check: "adverb" }, note });
+			const verb = verbFor(words, i);
+			out.push({
+				from: tok.from,
+				to: tok.to,
+				kind: { check: "adverb" },
+				note,
+				...(verb >= 0 ? { lookup: { ...pairHint(words, verb, i, `${words[verb]!.lemma} ${w}`), kinds: true } } : {}),
+			});
 		}
 	});
 	return out;

@@ -126,3 +126,30 @@ export const GUIDES: Record<GuideKey, Guide> = {
 		keep: "In a deliberate house style; otherwise these are mechanical fixes.",
 	},
 };
+
+/**
+ * The online "words to try" row in a hover card: its label, and a short craft reminder shown with it
+ * whichever lenses are on, so a list of alternatives never reads as an instruction to swap.
+ */
+export const SUGGESTION_ROWS: Partial<Record<CheckKind, { label: string; reminder: string }>> = {
+	adverb: {
+		label: "One verb instead",
+		reminder: "Pick the verb that already moves the way the adverb says, or keep the pair if none does. The second row is every kind of the verb, so read for the one that fits.",
+	},
+	tagAdverb: {
+		label: "One verb instead",
+		reminder: "King: \"said\" is nearly invisible, and a vivid tag pulls the eye off the dialogue. Use these sparingly; often the best fix is \"said\" and a line that carries the tone.",
+	},
+	qualifier: {
+		label: "One word instead",
+		reminder: "One exact word beats an intensifier and a vague one.",
+	},
+	nominalization: {
+		label: "As a verb",
+		reminder: "Let the verb carry the action instead of a noun built from it.",
+	},
+	echo: {
+		label: "Other words",
+		reminder: "Sometimes the repeat is the point. Change one only if the echo is an accident.",
+	},
+};

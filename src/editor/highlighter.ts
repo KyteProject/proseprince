@@ -5,8 +5,12 @@ import { excludedBlocks, type Range } from "../analysis/mask";
 import { namesIn, namesInText } from "../analysis/names";
 import { combine, report, type ReadabilityReport } from "../analysis/readability";
 import { rhythmTier } from "../analysis/rhythm";
-import { GUIDES, type GuideKey } from "../analysis/guides";
-import { kindSlug, type Highlight, type ParagraphResult } from "../analysis/types";
+import { GUIDES, type GuideKey, SUGGESTION_ROWS } from "../analysis/guides";
+import { kindSlug, type Highlight, type LookupHint, type Pairing, type ParagraphResult } from "../analysis/types";
+import { displayFor, pickEdits, shiftHint } from "../lookup/edit";
+import { chips } from "../lookup/popover";
+import type { Suggestion } from "../lookup/rank";
+import type { HintResult, PairingResult } from "../lookup/suggest";
 import { CHECK_INFO, type Effective, effective, POS_LABELS } from "../settingsModel";
 import type { ProsePrinceSettings } from "../settingsModel";
 import type { AnalysisClient } from "../worker/client";
@@ -30,7 +34,16 @@ export interface HighlighterHost {
 	worldTerms(): ReadonlySet<string>;
 	/** Whether this editor's note is one ProsePrince should run on (folder scope, frontmatter flag). */
 	isActive(view: EditorView): boolean;
+	/** Online words to try for a hover card. Absent, or null, when lookups are off. */
+	suggest?(hint: LookupHint): Promise<HintResult> | null;
+	/** A word picked from a hover card, for the lookup history. */
+	recordPick?(original: string, chosen: string, source: string): void;
+	/** Whether a modifier + noun pairing is a usual one, for a hover card. Absent, or null, when lookups are off. */
+	pairings?(pairing: Pairing): Promise<PairingResult> | null;
 }
+
+/** Only look words up once a card has stayed open this long, so passing the mouse over costs nothing. */
+const SUGGEST_DELAY = 400;
 
 /** A paragraph plus the known names that occur in it. */
 interface Prepared extends Paragraph {
@@ -364,7 +377,84 @@ function guideDrawer(h: Highlight): HTMLElement | null {
 	return details;
 }
 
-function tooltipFor(view: EditorView, findings: Finding[], showGuides: boolean): HTMLElement {
+/**
+ * "One verb instead: strolled · sauntered", filled in after the card has stayed open a moment.
+ * Picking a word replaces the finding (and its partner word) in one undoable edit.
+ */
+function suggestionRow(view: EditorView, host: HighlighterHost, f: Finding): HTMLElement | null {
+	const h = f.highlight;
+	const row = "check" in h.kind ? SUGGESTION_ROWS[h.kind.check] : undefined;
+	if (!h.lookup || !row || !host.suggest) return null;
+	const kind = (h.kind as { check: string }).check;
+	const hint = shiftHint(h.lookup, f.from - h.from);
+	const box = document.createElement("div");
+	box.className = "pp-suggest";
+	window.setTimeout(() => {
+		if (!box.isConnected) return;
+		const pending = host.suggest?.(h.lookup!);
+		if (!pending) return box.remove();
+		void pending.then(({ suggestions, kinds, error }) => {
+			if (!box.isConnected) return;
+			const slice = (a: number, b: number) => view.state.sliceDoc(a, b);
+			const pick = (s: Suggestion) => {
+				const edits = pickEdits(hint, s.word, slice);
+				if (!edits) {
+					status.textContent = "The text has changed. Hover again for fresh suggestions.";
+					return;
+				}
+				const original = slice(Math.min(hint.replace.from, hint.remove?.from ?? Infinity), Math.max(hint.replace.to, hint.remove?.to ?? -Infinity));
+				const replaced = edits.find((e) => e.from === hint.replace.from)?.insert ?? s.word;
+				view.dispatch({ changes: edits, userEvent: "input.replace" });
+				host.recordPick?.(original, replaced, kind);
+				view.focus();
+			};
+			const shown = (s: Suggestion) => displayFor(hint, s.word, slice);
+			const sections = [
+				chips(box, row.label, suggestions, shown, pick),
+				chips(box, `Other ways to ${hint.head.lemma.toLowerCase()}`, kinds, shown, pick),
+			].filter((s): s is HTMLElement => s !== null);
+			const status = el(box, "div", "pp-suggest-status", sections.length ? "" : error ?? "");
+			if (!sections.length && !error) return box.remove();
+			if (sections.length) el(sections[sections.length - 1]!, "div", "pp-suggest-reminder", row.reminder);
+		});
+	}, SUGGEST_DELAY);
+	return box;
+}
+
+const PAIRINGS_SHOWN = 12;
+
+/** "Usual words for 'silence': long, dead, complete…", with the writer's own marked, and what that means for the reader. */
+function pairingRow(host: HighlighterHost, h: Highlight): HTMLElement | null {
+	const pairing = h.pairing;
+	if (!pairing || !host.pairings) return null;
+	const box = document.createElement("div");
+	box.className = "pp-suggest";
+	window.setTimeout(() => {
+		if (!box.isConnected) return;
+		const pending = host.pairings?.(pairing);
+		if (!pending) return box.remove();
+		void pending.then(({ usual, yours, error }) => {
+			if (!box.isConnected) return;
+			if (!usual.length) {
+				if (error) el(box, "div", "pp-suggest-status", error);
+				else box.remove();
+				return;
+			}
+			const section = el(box, "div", "pp-lookup-section");
+			el(section, "div", "pp-lookup-label", `Usual words for "${pairing.noun}"`);
+			const row = el(section, "div", "pp-pairings");
+			const shown = [...usual.slice(0, PAIRINGS_SHOWN), ...yours.filter((y) => !usual.slice(0, PAIRINGS_SHOWN).includes(y))];
+			for (const word of shown) el(row, "span", yours.includes(word) ? "pp-pairing pp-pairing-yours" : "pp-pairing", word);
+			const quoted = (words: string[]) => words.map((w) => `"${w}"`).join(" and ");
+			el(section, "div", "pp-suggest-reminder", yours.length
+				? `${quoted(yours)} ${yours.length === 1 ? "is" : "are"} among the usual words for "${pairing.noun}", so readers will glide past ${yours.length === 1 ? "it" : "them"}. Fine for background; where the moment matters, look for the less expected word.`
+				: `None of yours is among the usual words for "${pairing.noun}", so the pairing will be noticed. Make sure it earns that.`);
+		});
+	}, SUGGEST_DELAY);
+	return box;
+}
+
+function tooltipFor(view: EditorView, findings: Finding[], showGuides: boolean, host: HighlighterHost): HTMLElement {
 	const dom = document.createElement("div");
 	dom.className = "pp-tooltip";
 	for (const f of findings) {
@@ -379,6 +469,8 @@ function tooltipFor(view: EditorView, findings: Finding[], showGuides: boolean):
 			note.className = "pp-tooltip-note";
 			note.textContent = h.note;
 		}
+		const suggestions = suggestionRow(view, host, f) ?? pairingRow(host, h);
+		if (suggestions) item.appendChild(suggestions);
 		if (showGuides) {
 			const drawer = guideDrawer(h);
 			if (drawer) item.appendChild(drawer);
@@ -408,8 +500,8 @@ export function createHighlighter(host: HighlighterHost): { extension: Extension
 			pos: Math.min(...findings.map((f) => f.from)),
 			end: Math.max(...findings.map((f) => f.to)),
 			above: true,
-			create: () => ({ dom: tooltipFor(view, findings, host.settings.guidance !== "hidden") }),
+			create: () => ({ dom: tooltipFor(view, findings, host.settings.guidance !== "hidden", host) }),
 		};
-	});
+	}, { hideOnChange: true });
 	return { extension: [highlightField, plugin, tooltip], plugin };
 }

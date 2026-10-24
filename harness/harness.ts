@@ -3,6 +3,11 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { ResultCache } from "../src/editor/cache";
 import { createHighlighter, type ReadabilityState } from "../src/editor/highlighter";
+import { LookupHistory } from "../src/lookup/history";
+import { openLookupPopover } from "../src/lookup/popover";
+import { LookupService } from "../src/lookup/service";
+import { suggestForHint, usualPairings } from "../src/lookup/suggest";
+import type { LookupHint, Pairing } from "../src/analysis/types";
 import { DEFAULT_SETTINGS, LENSES, lensSummary, type ProsePrinceSettings } from "../src/settingsModel";
 import { AnalysisClient } from "../src/worker/client";
 
@@ -76,11 +81,50 @@ for (const lens of LENSES) {
 	controls.append(button);
 }
 
+// Online lookups, as in Obsidian but with fetch (Datamuse sends CORS headers). In-memory cache only.
+const lookups = new LookupService({
+	fetchJson: async (url) => {
+		const response = await fetch(url);
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		return response.json() as Promise<unknown>;
+	},
+	apiKey: () => host.settings.lookup.apiKey,
+	online: () => navigator.onLine,
+});
+const history = new LookupHistory();
+Object.assign(host, {
+	suggest: (hint: LookupHint) => (host.settings.lookup.enabled ? suggestForHint(lookups, hint, host.settings.lookup.hideRare) : null),
+	recordPick: (a: string, b: string, source: string) => history.recordPick(a, b, source),
+	pairings: (pairing: Pairing) => (host.settings.lookup.enabled ? usualPairings(lookups, pairing) : null),
+});
+async function lookUp(): Promise<void> {
+	const { from, to } = view.state.selection.main;
+	const word = from === to ? view.state.wordAt(from) : { from, to };
+	if (!word) return;
+	const line = view.state.doc.lineAt(word.from);
+	const text = view.state.sliceDoc(word.from, word.to);
+	const info = /\s/.test(text) ? null : await host.client.wordInfo(line.text, word.from - line.from, word.to - line.from);
+	openLookupPopover(view, { from: word.from, to: word.to, text, info }, {
+		service: lookups,
+		hideRare: host.settings.lookup.hideRare,
+		onLookup: (w) => history.recordLookup(w),
+		onPick: (a, b) => history.recordPick(a, b, "lookup"),
+	});
+}
+const lookupButton = document.createElement("button");
+lookupButton.textContent = "Look up word at cursor";
+lookupButton.onmousedown = (e) => e.preventDefault();
+lookupButton.onclick = () => void lookUp();
+controls.append(lookupButton);
+
 /** Inspection hook for automated checks: highlighted text grouped by class. */
 (window as unknown as Record<string, unknown>).__pp = {
 	view,
 	host,
 	refresh,
+	lookups,
+	history,
+	lookUp,
 	highlights() {
 		const out: Record<string, string[]> = {};
 		view.contentDOM.querySelectorAll("[class*='pp-']").forEach((el) => {

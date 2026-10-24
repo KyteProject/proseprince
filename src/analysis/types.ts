@@ -51,6 +51,42 @@ export interface Highlight {
 	note?: string;
 	/** Which "How to approach this" guide applies, when it depends on the shape found (see guides.ts). */
 	guide?: string;
+	/** What an optional online lookup asks for, and how a picked word is applied. */
+	lookup?: LookupHint;
+	/** Adjectives on a noun, so an online lookup can show whether the pairing is a usual one ("dead silence"). */
+	pairing?: Pairing;
+}
+
+export interface Pairing {
+	/** The noun's lemma, lowercased. */
+	noun: string;
+	/** The writer's modifiers, lowercased as written. */
+	modifiers: string[];
+}
+
+/** A span of the paragraph with the text it had when analysed, so a stale edit can be refused. */
+export interface Span {
+	from: number;
+	to: number;
+	text: string;
+}
+
+/**
+ * Words to try for a finding (offsets into the paragraph). "walked slowly" asks for verbs meaning
+ * "walk slowly"; picking "stroll" replaces both words with "strolled".
+ */
+export interface LookupHint {
+	/** "phrase": words meaning `query` ("walk slowly", "very cold"); "word": synonyms of the head's lemma. */
+	mode: "phrase" | "word";
+	query: string;
+	/** The word whose tense, number and capitals a suggestion takes. */
+	head: Span & { lemma: string; pos: UposTag; prev: string };
+	/** What a suggestion replaces: the head, or the head and its partner when they sit together. */
+	replace: { from: number; to: number };
+	/** A partner word deleted along with the pick (the adverb) when it isn't inside `replace`. */
+	remove?: Span;
+	/** Also offer more specific kinds of the head verb ("walk" → trudge, plod, stride), for manner adverbs. */
+	kinds?: boolean;
 }
 
 export interface SentenceInfo {

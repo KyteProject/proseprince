@@ -1,9 +1,14 @@
 import type { EditorView, ViewPlugin } from "@codemirror/view";
-import { debounce, type Editor, editorInfoField, MarkdownView, Menu, Notice, Plugin, setIcon, TFile } from "obsidian";
+import { debounce, type Editor, editorInfoField, MarkdownView, Menu, Notice, Plugin, requestUrl, setIcon, TFile } from "obsidian";
 import type { ReadabilityReport } from "./analysis/readability";
 import { CHECK_KINDS, POS_CATEGORIES } from "./analysis/types";
 import { ResultCache } from "./editor/cache";
 import { createHighlighter, type HighlightRunner, type ReadabilityState } from "./editor/highlighter";
+import { LookupHistory } from "./lookup/history";
+import { openLookupPopover } from "./lookup/popover";
+import { LookupService } from "./lookup/service";
+import { type HintResult, type PairingResult, suggestForHint, usualPairings } from "./lookup/suggest";
+import type { LookupHint, Pairing } from "./analysis/types";
 import { ProsePrinceSettingTab } from "./settings";
 import {
 	activeLenses,
@@ -41,9 +46,25 @@ export default class ProsePrincePlugin extends Plugin {
 	private rebuildWorld = debounce(async () => {
 		if (await this.world.rebuild()) this.refreshEditors();
 	}, 800, true);
+	/** Online word lookups. Nothing is requested unless `settings.lookup.enabled` is on. */
+	lookups = new LookupService({
+		fetchJson: async (url) => {
+			const response = await requestUrl({ url, method: "GET", throw: false });
+			if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
+			return response.json as unknown;
+		},
+		apiKey: () => this.settings.lookup.apiKey,
+		online: () => navigator.onLine,
+		onChange: () => this.saveLookupCache(),
+	});
+	lookupHistory = new LookupHistory(() => this.saveLookupHistory());
+	private saveLookupCache = debounce(() => void this.writePluginFile("lookup-cache.json", this.lookups.serialize()), 30_000, true);
+	private saveLookupHistory = debounce(() => void this.writePluginFile("lookup-history.json", this.lookupHistory.serialize()), 5_000, true);
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.lookups.restore(await this.readPluginFile("lookup-cache.json"));
+		this.lookupHistory.restore(await this.readPluginFile("lookup-history.json"));
 		const { extension, plugin } = createHighlighter(this);
 		this.runner = plugin;
 		this.registerEditorExtension(extension);
@@ -107,7 +128,19 @@ export default class ProsePrincePlugin extends Plugin {
 				},
 			});
 		}
-		this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => this.addWorldMenu(menu, editor)));
+		this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
+			this.addLookupMenu(menu, editor);
+			this.addWorldMenu(menu, editor);
+		}));
+		this.addCommand({
+			id: "look-up-word",
+			name: "Look up word at cursor (online)",
+			editorCheckCallback: (checking: boolean, editor: Editor) => {
+				if (!this.settings.lookup.enabled || !lookupRange(editor)) return false;
+				if (!checking) void this.lookUp(editor);
+				return true;
+			},
+		});
 
 		this.addCommand({
 			id: "toggle-highlighting",
@@ -221,6 +254,99 @@ export default class ProsePrincePlugin extends Plugin {
 		}
 	}
 
+	/** Words to try in a hover card; null when lookups (or hover suggestions) are off. */
+	suggest(hint: LookupHint): Promise<HintResult> | null {
+		const { enabled, hoverCards, hideRare } = this.settings.lookup;
+		return enabled && hoverCards ? suggestForHint(this.lookups, hint, hideRare) : null;
+	}
+
+	/** Whether a modifier + noun pairing is a usual one; null when lookups (or hover suggestions) are off. */
+	pairings(pairing: Pairing): Promise<PairingResult> | null {
+		const { enabled, hoverCards } = this.settings.lookup;
+		return enabled && hoverCards ? usualPairings(this.lookups, pairing) : null;
+	}
+
+	recordPick(original: string, chosen: string, source: string): void {
+		if (this.settings.lookup.history) this.lookupHistory.recordPick(original, chosen, source);
+	}
+
+	/** Right-click: ProsePrince: look up "word". Only when online lookups are switched on. */
+	private addLookupMenu(menu: Menu, editor: Editor): void {
+		if (!this.settings.lookup.enabled || !this.settings.lookup.rightClick) return;
+		const range = lookupRange(editor);
+		if (!range) return;
+		menu.addItem((item) => item
+			.setTitle(`ProsePrince: look up "${range.text}"`)
+			.setIcon("book-open-text")
+			.setSection("proseprince")
+			.onClick(() => void this.lookUp(editor)));
+	}
+
+	/** Open the lookup popover for the selection, or the word at the cursor. */
+	private async lookUp(editor: Editor): Promise<void> {
+		try {
+			await this.openLookup(editor);
+		} catch (error) {
+			console.error("ProsePrince: lookup failed", error);
+			new Notice(`ProsePrince could not open the lookup: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	private async openLookup(editor: Editor): Promise<void> {
+		// Each step of opening and closing the card, for the developer console.
+		const trace = (step: string) => console.debug(`ProsePrince lookup: ${step}`);
+		const range = lookupRange(editor);
+		trace(`started for "${range?.text ?? "(no word)"}"`);
+		const view = (editor as unknown as { cm?: EditorView }).cm;
+		if (!range) throw new Error("no word at the cursor");
+		if (!view) throw new Error("no editor view");
+		const line = editor.getLine(range.line);
+		const names = [...this.castNames()].filter((n) => line.includes(n));
+		// The worker may be busy with a long analysis pass; don't let that hold the card back.
+		const tagged = this.client.wordInfo(line, range.fromCh, range.toCh, names).catch((error: unknown) => {
+			console.warn("ProsePrince: could not tag the word for lookup", error);
+			return null;
+		});
+		const timeout = new Promise<null>((resolve) => window.setTimeout(() => resolve(null), WORD_INFO_TIMEOUT));
+		const info = /\s/.test(range.text) ? null : await Promise.race([tagged, timeout]);
+		if (!info && !/\s/.test(range.text)) console.warn(`ProsePrince: looking up "${range.text}" without its part of speech`);
+		trace(info ? `tagged as ${info.upos} (${info.lemma})` : "no tag, going ahead");
+		const from = editor.posToOffset({ line: range.line, ch: range.fromCh });
+		openLookupPopover(view, { from, to: from + range.text.length, text: range.text, info }, {
+			service: this.lookups,
+			hideRare: this.settings.lookup.hideRare,
+			onLookup: (word) => {
+				if (this.settings.lookup.history) this.lookupHistory.recordLookup(word);
+			},
+			onPick: (original, chosen) => {
+				if (this.settings.lookup.history) this.lookupHistory.recordPick(original, chosen, "lookup");
+			},
+			trace,
+		});
+	}
+
+	private pluginFile(name: string): string {
+		return `${this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/${name}`;
+	}
+
+	private async readPluginFile(name: string): Promise<string | null> {
+		const path = this.pluginFile(name);
+		try {
+			return (await this.app.vault.adapter.exists(path)) ? await this.app.vault.adapter.read(path) : null;
+		} catch (error) {
+			console.error(`ProsePrince: could not read ${path}`, error);
+			return null;
+		}
+	}
+
+	private async writePluginFile(name: string, text: string): Promise<void> {
+		try {
+			await this.app.vault.adapter.write(this.pluginFile(name), text);
+		} catch (error) {
+			console.error(`ProsePrince: could not save ${name}`, error);
+		}
+	}
+
 	private async addToWorld(section: WorldSection, entry: string): Promise<void> {
 		await this.world.add(section, entry);
 		await this.world.rebuild();
@@ -229,6 +355,8 @@ export default class ProsePrincePlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.saveLookupCache.run();
+		this.saveLookupHistory.run();
 		this.client.dispose();
 		this.cache.clear();
 	}
@@ -374,6 +502,7 @@ export default class ProsePrincePlugin extends Plugin {
 				...(typeof saved.overrides?.rhythm === "boolean" ? { rhythm: saved.overrides.rhythm } : {}),
 			},
 			rhythm: { ...defaults.rhythm, ...(saved.rhythm ?? {}) },
+			lookup: { ...defaults.lookup, ...(saved.lookup ?? {}) },
 			folders: Array.isArray(saved.folders) ? saved.folders.filter((f): f is string => typeof f === "string") : [],
 		};
 	}
@@ -394,6 +523,30 @@ export default class ProsePrincePlugin extends Plugin {
 			cm?.plugin(this.runner)?.refresh();
 		});
 	}
+}
+
+/** How long a lookup waits for the tagger before going ahead without the part of speech. */
+const WORD_INFO_TIMEOUT = 1500;
+
+/**
+ * What a lookup acts on: the selection (one line, up to 60 characters) or the word at the cursor,
+ * with surrounding punctuation trimmed off.
+ */
+function lookupRange(editor: Editor): { line: number; fromCh: number; toCh: number; text: string } | null {
+	let from = editor.getCursor("from");
+	let to = editor.getCursor("to");
+	if (from.line === to.line && from.ch === to.ch) {
+		const word = editor.wordAt(from);
+		if (!word) return null;
+		from = word.from;
+		to = word.to;
+	}
+	if (from.line !== to.line) return null;
+	const raw = editor.getRange(from, to);
+	const lead = raw.length - raw.replace(/^[^\p{L}\p{N}]+/u, "").length;
+	const text = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+	if (!text || text.length > 60 || !/\p{L}/u.test(text)) return null;
+	return { line: from.line, fromCh: from.ch + lead, toCh: from.ch + lead + text.length, text };
 }
 
 function describe(label: string, r: ReadabilityReport | null): string {
