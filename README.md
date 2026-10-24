@@ -57,6 +57,18 @@ Hover a line for who and why, to pin a speaker, or to mark quotes as *Not speech
 
 **Voices.** Hovering a line also shows that speaker in this note ("Linh in this note: 14 lines (3 guessed) · 6.2 words a line · 30% of the dialogue"). The *Dialogue: voices in this note* command opens a table per speaker: lines, words, words per line, how often they ask or exclaim, their share of the talk, and "their words": the words they lean on more than everyone else (a weighted log-odds comparison, common words left out; with a chapter's worth of lines it's a lean, not proof). Below it, the scene's **shape**: one mark per line, coloured by speaker, faint for narration, with the longest stretch of narration without dialogue (or dialogue without narration) when it runs to eight lines or more. Click a mark to go there. It all reads the note only.
 
+## Outline sidebar
+
+The ribbon's scroll icon (or *Open outline sidebar*) opens an outline for the note you're editing, in the right sidebar. It draws at once when you switch notes (issues, dialogue and rhythm fill in as the rest of the note is analysed) and updates as you pause typing. Each section folds away:
+
+- **Scene**: `summary`, `status`, `pov`, `setting`, `day` and `characters` from the note's frontmatter.
+- **This note**: words, characters (with spaces), paragraphs, sentences, reading time and dialogue share, counting prose only: no frontmatter, `%% … %%` comments or pins, code, headings or callouts. Reading ease, grade and rhythm underneath. With `target: 2500` in the frontmatter, a progress bar; and the words added since you opened the note this session.
+- **Beats**: a single `#` heading is the title and every other heading is a beat (indented by level). Each beat is a jump link with its word count, its issues, and a bar showing its length against the longest beat with the dialogue part darker. The beat at the cursor is highlighted.
+- **Sentence rhythm**: one bar per sentence (or per small group in a long chapter), by felt length, cool to warm; click to go there.
+- **Issues**: counts per check, grouped as in settings, following your lenses (switch to *All checks* for an edit pass). Click a check to walk through its occurrences.
+- **Dialogue**: speakers with their colour, lines and share (hover for more; click to walk through their lines), how many lines are certain, guessed or unclear, long untagged runs, and the voices window.
+- **Repeated words**: the note's most used nouns, verbs, adjectives and adverbs (names and world terms left out), each a button that walks through its uses.
+
 ## Where it runs
 
 Settings → **Where ProsePrince runs**: list the folders you write prose in (with autocomplete), and only notes inside them (and their subfolders) are highlighted. With no folders set it runs everywhere. A note's frontmatter always wins: `proseprince: true` switches it on outside those folders, `proseprince: false` switches it off inside them; the **Toggle ProsePrince for this note** command sets the flag for you. Outside the prose folders the status-bar icons dim.
