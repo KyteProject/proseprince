@@ -1,7 +1,7 @@
 import { StateEffect, StateField, type Extension, type Range as DecorationRange, type Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, hoverTooltip, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { filterHighlights } from "../analysis/filter";
-import { excludedBlocks, type Range } from "../analysis/mask";
+import { excludedBlocks, maskInline, type Range } from "../analysis/mask";
 import { namesIn, namesInText } from "../analysis/names";
 import { combine, report, type ReadabilityReport } from "../analysis/readability";
 import { attribute, type Attribution, colourSlots, type ParagraphDialogue, pinIn, resetsTurns, speakersIn, UNTAGGED_RUN, untaggedRuns } from "../analysis/dialogue/attribute";
@@ -9,7 +9,8 @@ import type { SpeakerKind } from "../analysis/dialogue/speech";
 import { longestStretches, type Stretch, type Voice, type VoiceLine, voices } from "../analysis/dialogue/voices";
 import { rhythmTier } from "../analysis/rhythm";
 import { GUIDES, type GuideKey, SUGGESTION_ROWS } from "../analysis/guides";
-import { kindSlug, type Highlight, type LookupHint, type Pairing, type ParagraphResult } from "../analysis/types";
+import { beatAt, beatsOf, countLine, countWords, headingsIn, isProseLine, repeatedWords } from "../analysis/outline";
+import { type AnalysisOptions, CHECK_KINDS, type CheckKind, kindSlug, type Highlight, type LookupHint, type Pairing, type ParagraphResult, type ParagraphStats } from "../analysis/types";
 import { displayFor, pickEdits, shiftHint } from "../lookup/edit";
 import { chips } from "../lookup/popover";
 import type { Suggestion } from "../lookup/rank";
@@ -39,6 +40,10 @@ export interface HighlighterHost {
 	isActive(view: EditorView): boolean;
 	/** Online words to try for a hover card. Absent, or null, when lookups are off. */
 	suggest?(hint: LookupHint): Promise<HintResult> | null;
+	/** The cursor moved or the text changed in this editor (for the sidebar's current beat). */
+	reportCursor?(view: EditorView, pos: number): void;
+	/** The editor's text was replaced rather than typed: another note loaded into the same tab, or Sync. */
+	reportDocumentReplaced?(view: EditorView): void;
 	/** A word picked from a hover card, for the lookup history. */
 	recordPick?(original: string, chosen: string, source: string): void;
 	/** The speaker a name or alias belongs to ("Effie" → "Eufemie"), from the World note and character notes. */
@@ -95,6 +100,51 @@ interface NoteDialogue {
 	extra: Map<number, Highlight[]>;
 	/** Every attributed line's words, for the voices. */
 	lines: VoiceLine[];
+}
+
+/** A beat (or the title, or the stretch before the first heading) with its own numbers, for the sidebar. */
+export interface BeatRow {
+	/** The prose before the first heading, not a heading of its own. */
+	opening: boolean;
+	text: string;
+	level: number;
+	/** Document offset of the heading, or of the note's first prose for the opening stretch. */
+	from: number;
+	words: number;
+	/** Share of the beat's words that are speech. */
+	dialogue: number;
+	issues: number;
+}
+
+/** Everything the sidebar shows for one note. */
+export interface OutlineReport {
+	/** Paragraphs not analysed yet: issues, dialogue and rhythm are partial until this is 0. */
+	pending: number;
+	title: string | null;
+	beats: BeatRow[];
+	words: number;
+	characters: number;
+	paragraphs: number;
+	readability: ReadabilityReport | null;
+	/** Share of prose words that are speech. */
+	dialogueShare: number;
+	/** Issue positions (document offsets) per check, for counts and jump-to. */
+	issues: Map<CheckKind, number[]>;
+	/** Whether issues follow the lenses or count every check. */
+	allChecks: boolean;
+	dialogue: {
+		voices: (Voice & { colour: string })[];
+		/** Where each speaker's lines start, for jump-to. */
+		positions: Map<string, number[]>;
+		certain: number;
+		guessed: number;
+		unknown: number;
+		untaggedRuns: number;
+	};
+	/** Each sentence: where it starts and its felt length, for the rhythm sparkline. */
+	sentences: { from: number; length: number }[];
+	/** The note's most repeated content words, with where each use is. */
+	repeated: { word: string; n: number; positions: number[] }[];
 }
 
 /** Everything the "Voices in this note" window shows. */
@@ -225,10 +275,12 @@ export class HighlightRunner {
 	}
 
 	update(update: ViewUpdate): void {
+		if (update.selectionSet || update.docChanged) this.host.reportCursor?.(this.view, update.state.selection.main.head);
 		if (update.docChanged) {
 			// Highlights were mapped through the edit, so what's on screen no longer matches `drawn`.
 			this.drawn = "\u0000stale";
 			const typing = isTyping(update);
+			if (!typing) this.host.reportDocumentReplaced?.(this.view);
 			this.suppressCursorWord = typing && typedInsideWord(update);
 			debug(typing ? "typing" : "document replaced without typing (e.g. Sync)", "→ re-highlight");
 			this.schedule(typing ? this.host.settings.debounceMs : 0);
@@ -358,15 +410,7 @@ export class HighlightRunner {
 					signature.push(`${p.from + s.from}:${p.from + s.to}:${cls}`);
 				}
 			}
-			const suppressed = suppressedIn(p.text);
-			const terms = host.worldTerms();
-			// Characters don't talk like Le Guin: unless asked, leave their lines alone.
-			const quiet = settings.dialogue.highlightsInDialogue ? [] : (result.dialogue?.flatMap((l) => l.spans) ?? []);
-			const own = noteDialogue?.extra.get(p.from);
-			for (const h of filterHighlights(own ? [...result.highlights, ...own] : result.highlights, options)) {
-				if ("check" in h.kind && suppressed.has(kindSlug(h.kind.check))) continue;
-				if (quiet.length && !("check" in h.kind && DIALOGUE_CHECKS.has(h.kind.check)) && quiet.some((s) => h.from >= s.from && h.to <= s.to)) continue;
-				if (terms.size && "check" in h.kind && (h.kind.check === "echo" || h.kind.check === "metaphor") && mentionsTerm(p.text.slice(h.from, h.to), terms)) continue;
+			for (const h of this.shown(p, result, options, noteDialogue)) {
 				const from = p.from + h.from;
 				const to = p.from + h.to;
 				if (from < wordTo && to > wordFrom) continue;
@@ -436,12 +480,161 @@ export class HighlightRunner {
 		return { units, attributed, extra, lines };
 	}
 
+	/**
+	 * A paragraph's highlights as the writer sees them: the lenses and toggles, `%% not … %%` comments,
+	 * world terms, and (unless switched on) nothing inside dialogue but the dialogue checks.
+	 */
+	private shown(p: Prepared, result: ParagraphResult, options: AnalysisOptions, noteDialogue: NoteDialogue | null): Highlight[] {
+		const settings = this.host.settings;
+		const suppressed = suppressedIn(p.text);
+		const terms = this.host.worldTerms();
+		// Characters don't talk like Le Guin: unless asked, leave their lines alone.
+		const quiet = settings.dialogue.highlightsInDialogue ? [] : (result.dialogue?.flatMap((l) => l.spans) ?? []);
+		const own = noteDialogue?.extra.get(p.from);
+		return filterHighlights(own ? [...result.highlights, ...own] : result.highlights, options).filter((h) => {
+			if ("check" in h.kind && suppressed.has(kindSlug(h.kind.check))) return false;
+			if (quiet.length && !("check" in h.kind && DIALOGUE_CHECKS.has(h.kind.check)) && quiet.some((s) => h.from >= s.from && h.to <= s.to)) return false;
+			if (terms.size && "check" in h.kind && (h.kind.check === "echo" || h.kind.check === "metaphor") && mentionsTerm(p.text.slice(h.from, h.to), terms)) return false;
+			return true;
+		});
+	}
+
 	/** One speaker's voice in this note, for the speaker card. */
 	voiceOf(speaker: string): Voice | undefined {
 		const d = this.lastDialogue;
 		if (!d) return undefined;
 		if (this.voiceCache?.for !== d) this.voiceCache = { for: d, voices: voices(d.lines) };
 		return this.voiceCache.voices.find((v) => v.speaker === speaker);
+	}
+
+	/** The sidebar's numbers once every paragraph is analysed (analysing any that aren't yet). */
+	async outlineReport(allChecks: boolean): Promise<OutlineReport | null> {
+		const all = this.prepare(this.view.state.doc, allParagraphs(this.view.state.doc));
+		if (!(await this.ensure(all, this.requestId))) return null;
+		return this.outlineNow(allChecks);
+	}
+
+	/**
+	 * The sidebar's numbers from what is analysed so far, at once: counts and beats are always complete;
+	 * issues, dialogue and rhythm fill in as `pending` paragraphs are analysed. Issues follow the lenses
+	 * unless `allChecks`.
+	 */
+	outlineNow(allChecks: boolean): OutlineReport {
+		const { host } = this;
+		const doc = this.view.state.doc;
+		const all = this.prepare(doc, allParagraphs(doc));
+		const pending = all.filter((p) => !host.cache.has(this.keyOf(p))).length;
+		const text = doc.toString();
+		const { title, beats } = beatsOf(headingsIn(text, excludedFor(doc)));
+		const active = effective(host.settings);
+		const options: AnalysisOptions = {
+			pos: active.pos,
+			checks: allChecks ? Object.fromEntries(CHECK_KINDS.map((k) => [k, true])) : active.checks,
+			echoWindow: host.settings.echoWindow,
+		};
+		const d = this.attributeNote(doc);
+		// Speech spans per paragraph, for dialogue words.
+		const speechIn = new Map<number, { from: number; to: number }[]>();
+		d.units.forEach((u, i) => {
+			const list = speechIn.get(u.paragraph.from) ?? [];
+			for (const a of d.attributed[i] ?? []) if (!a.thought) list.push({ from: a.from, to: a.to });
+			speechIn.set(u.paragraph.from, list);
+		});
+
+		const rows: BeatRow[] = beats.map((b) => ({ opening: false, text: b.text, level: b.level, from: b.from, words: 0, dialogue: 0, issues: 0 }));
+		const opening: BeatRow = { opening: true, text: "Opening", level: beats[0]?.level ?? 2, from: -1, words: 0, dialogue: 0, issues: 0 };
+		const speechWords = new Array<number>(rows.length).fill(0);
+		let openingSpeech = 0;
+		const rowAt = (pos: number) => {
+			const i = beatAt(beats, pos);
+			return i < 0 ? opening : rows[i]!;
+		};
+		let words = 0;
+		let characters = 0;
+		let speech = 0;
+		let paragraphs = 0;
+		const issues = new Map<CheckKind, number[]>();
+		const sentences: OutlineReport["sentences"] = [];
+		const content: { word: string; at: number }[] = [];
+		const stats: ParagraphStats[] = [];
+		for (const p of all) {
+			const result = host.cache.get(this.keyOf(p));
+			// Line by line: a heading or callout can share a paragraph with prose.
+			let at = 0;
+			let prose = false;
+			for (const line of p.text.split("\n")) {
+				const c = countLine(line);
+				if (c.words) {
+					const row = rowAt(p.from + at);
+					row.words += c.words;
+					if (row.from < 0) opening.from = p.from + at;
+					words += c.words;
+					characters += c.characters;
+					prose = true;
+				}
+				at += line.length + 1;
+			}
+			if (prose) paragraphs++;
+			if (!result) continue;
+			stats.push(result.stats);
+			for (const s of speechIn.get(p.from) ?? []) {
+				const n = countWords(maskInline(p.text.slice(s.from, s.to)));
+				speech += n;
+				const i = beatAt(beats, p.from + s.from);
+				if (i < 0) openingSpeech += n;
+				else speechWords[i]! += n;
+			}
+			for (const s of result.sentences) if (isProseLine(p.text.slice(s.from, s.to))) sentences.push({ from: p.from + s.from, length: s.effectiveLength });
+			for (const h of this.shown(p, result, options, d)) {
+				if ("check" in h.kind) {
+					const list = issues.get(h.kind.check) ?? [];
+					list.push(p.from + h.from);
+					issues.set(h.kind.check, list);
+					rowAt(p.from + h.from).issues++;
+				}
+			}
+			for (const h of result.highlights) {
+				if ("pos" in h.kind && ["NOUN", "VERB", "ADJ", "ADV"].includes(h.kind.pos)) content.push({ word: p.text.slice(h.from, h.to), at: p.from + h.from });
+			}
+		}
+		rows.forEach((r, i) => (r.dialogue = r.words ? speechWords[i]! / r.words : 0));
+		opening.dialogue = opening.words ? openingSpeech / opening.words : 0;
+
+		const exclude = new Set([...host.castNames(), ...host.worldTerms(), ...docNames(doc)].map((w) => w.toLowerCase()));
+		const stem = (w: string) => w.toLowerCase().replace(/[’']s$/, "").replace(/s$/, "");
+		const repeated = repeatedWords(content.map((c) => c.word), exclude).map((r) => ({
+			...r,
+			positions: content.filter((c) => stem(c.word) === stem(r.word)).map((c) => c.at),
+		}));
+		const slots = colourSlots(speakersIn(d.attributed));
+		const colourOf = (name: string) => host.speakerColour?.(name) ?? `var(--pp-speaker-${slots.get(name) ?? 0})`;
+		const lines = d.attributed.flat().filter((a) => !a.thought);
+		const positions = new Map<string, number[]>();
+		d.attributed.forEach((spans, i) => {
+			for (const a of spans) if (!a.thought && a.speaker) positions.set(a.speaker, [...(positions.get(a.speaker) ?? []), d.units[i]!.paragraph.from + a.from]);
+		});
+		return {
+			pending,
+			title: title?.text ?? null,
+			beats: opening.words && rows.length ? [opening, ...rows] : rows,
+			words,
+			characters,
+			paragraphs,
+			readability: stats.length ? report(combine(stats)) : null,
+			dialogueShare: words ? speech / words : 0,
+			issues,
+			allChecks,
+			dialogue: {
+				voices: voices(d.lines).map((v) => ({ ...v, colour: colourOf(v.speaker) })),
+				positions,
+				certain: lines.filter((a) => a.speaker && a.certain).length,
+				guessed: lines.filter((a) => a.speaker && !a.certain).length,
+				unknown: lines.filter((a) => !a.speaker).length,
+				untaggedRuns: untaggedRuns(d.attributed, d.units.map((u) => ({ text: u.text, info: null }))).length,
+			},
+			sentences,
+			repeated,
+		};
 	}
 
 	/** The whole note's voices and shape: analyses any paragraphs not yet cached first. */

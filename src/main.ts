@@ -1,5 +1,5 @@
 import type { EditorView, ViewPlugin } from "@codemirror/view";
-import { debounce, type Editor, editorInfoField, MarkdownView, Menu, Notice, Plugin, requestUrl, setIcon, TFile } from "obsidian";
+import { debounce, type Editor, editorInfoField, MarkdownView, Menu, Notice, Plugin, requestUrl, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import type { ReadabilityReport } from "./analysis/readability";
 import { CHECK_KINDS, POS_CATEGORIES } from "./analysis/types";
 import { ResultCache } from "./editor/cache";
@@ -10,6 +10,8 @@ import { LookupService } from "./lookup/service";
 import { type HintResult, type PairingResult, suggestForHint, usualPairings } from "./lookup/suggest";
 import type { LookupHint, Pairing } from "./analysis/types";
 import { ProsePrinceSettingTab } from "./settings";
+import type { OutlineReport } from "./editor/highlighter";
+import { OUTLINE_VIEW, OutlineView } from "./sidebar";
 import { VoicesModal } from "./voicesModal";
 import {
 	activeLenses,
@@ -59,6 +61,11 @@ export default class ProsePrincePlugin extends Plugin {
 		onChange: () => this.saveLookupCache(),
 	});
 	lookupHistory = new LookupHistory(() => this.saveLookupHistory());
+	/** The Markdown editor the sidebar describes: the last one that had focus. */
+	private outlineSource: MarkdownView | null = null;
+	/** Prose words in each note when first seen this session, for "words this session". */
+	private sessionStart = new Map<string, number>();
+	private refreshOutline = debounce(() => void this.updateOutline(), 400, true);
 	private saveLookupCache = debounce(() => void this.writePluginFile("lookup-cache.json", this.lookups.serialize()), 30_000, true);
 	private saveLookupHistory = debounce(() => void this.writePluginFile("lookup-history.json", this.lookupHistory.serialize()), 5_000, true);
 
@@ -70,6 +77,33 @@ export default class ProsePrincePlugin extends Plugin {
 		this.runner = plugin;
 		this.registerEditorExtension(extension);
 		this.addSettingTab(new ProsePrinceSettingTab(this.app, this));
+
+		this.registerView(OUTLINE_VIEW, (leaf: WorkspaceLeaf) => new OutlineView(leaf));
+		this.addRibbonIcon("scroll-text", "ProsePrince outline", () => void this.openOutline());
+		this.addCommand({ id: "open-outline", name: "Open outline sidebar", callback: () => void this.openOutline() });
+		this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
+			if (!(leaf?.view instanceof MarkdownView)) return;
+			// Another tab: draw at once rather than after the typing pause.
+			this.outlineSource = leaf.view;
+			void this.updateOutline();
+		}));
+		// Another note opened in the same tab is caught by `reportDocumentReplaced`, once its text has loaded;
+		// this is a fallback in case the editor is rebuilt instead (switching view modes).
+		this.registerEvent(this.app.workspace.on("file-open", () => {
+			window.setTimeout(() => {
+				const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (active) this.outlineSource = active;
+				void this.updateOutline();
+			}, 250);
+		}));
+		this.registerEvent(this.app.workspace.on("editor-change", () => this.refreshOutline()));
+		this.registerEvent(this.app.metadataCache.on("changed", (file) => {
+			if (file === this.outlineSource?.file) this.refreshOutline();
+		}));
+		this.app.workspace.onLayoutReady(() => {
+			this.outlineSource = this.app.workspace.getActiveViewOfType(MarkdownView);
+			this.refreshOutline();
+		});
 
 		this.lensItem = this.addStatusBarItem();
 		this.lensItem.addClass("pp-status-lens", "mod-clickable");
@@ -399,6 +433,75 @@ export default class ProsePrincePlugin extends Plugin {
 		this.cache.clear();
 	}
 
+	/** Open the outline in the right sidebar (or reveal it if it's already there). */
+	private async openOutline(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(OUTLINE_VIEW)[0];
+		const leaf = existing ?? this.app.workspace.getRightLeaf(false);
+		if (!leaf) return;
+		if (!existing) await leaf.setViewState({ type: OUTLINE_VIEW, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+		this.refreshOutline();
+	}
+
+	private outlineViews(): OutlineView[] {
+		return this.app.workspace.getLeavesOfType(OUTLINE_VIEW).map((l) => l.view).filter((v): v is OutlineView => v instanceof OutlineView);
+	}
+
+	/** Recompute the sidebar for the note being edited. Cached analysis makes this cheap after the first time. */
+	private async updateOutline(): Promise<void> {
+		const views = this.outlineViews();
+		if (!views.length) return;
+		const md = this.outlineSource;
+		const file = md?.file;
+		const cm = (md?.editor as unknown as { cm?: EditorView } | undefined)?.cm;
+		const runner = cm && this.runner ? cm.plugin(this.runner) : null;
+		if (!md || !file || !cm || !runner || !md.containerEl.isConnected) {
+			for (const v of views) v.clear("Open a note to see its outline.");
+			return;
+		}
+		// Draw what's known now (counts and beats are always complete), then again once the whole note is analysed.
+		const now = runner.outlineNow(this.settings.outlineAllChecks);
+		if (!this.sessionStart.has(file.path)) this.sessionStart.set(file.path, now.words);
+		this.showOutline(views, now, md, file, cm);
+		if (!now.pending) return;
+		const full = await runner.outlineReport(this.settings.outlineAllChecks);
+		// Only if the same note is still showing: another note may have loaded into this tab meanwhile.
+		if (full && md === this.outlineSource && md.file?.path === file.path) this.showOutline(this.outlineViews(), full, md, file, cm);
+	}
+
+	private showOutline(views: OutlineView[], report: OutlineReport, md: MarkdownView, file: TFile, cm: EditorView): void {
+		for (const v of views) {
+			v.show(report, {
+				title: file.basename,
+				frontmatter: (this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}) as Record<string, unknown>,
+				view: cm,
+				cursor: cm.state.selection.main.head,
+				sessionStart: this.sessionStart.get(file.path)!,
+				rhythmTiers: this.settings.rhythm.tiers,
+				highlighting: this.settings.enabled && this.isActiveFile(file),
+				onToggleAllChecks: () => {
+					this.settings.outlineAllChecks = !this.settings.outlineAllChecks;
+					void this.saveSettings();
+				},
+				onVoices: () => void this.showVoices(cm, file.basename),
+				onFocusEditor: () => this.app.workspace.setActiveLeaf(md.leaf, { focus: true }),
+			});
+		}
+	}
+
+	/** A note loaded into an editor (same tab, new note) or replaced by Sync: redraw the sidebar if it's this one. */
+	reportDocumentReplaced(view: EditorView): void {
+		const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const cm = (active?.editor as unknown as { cm?: EditorView } | undefined)?.cm;
+		if (active && cm === view) this.outlineSource = active;
+		if ((this.outlineSource?.editor as unknown as { cm?: EditorView } | undefined)?.cm === view) void this.updateOutline();
+	}
+
+	reportCursor(view: EditorView, pos: number): void {
+		const cm = (this.outlineSource?.editor as unknown as { cm?: EditorView } | undefined)?.cm;
+		if (cm === view) for (const v of this.outlineViews()) v.setCursor(pos);
+	}
+
 	private async showVoices(view: EditorView, title: string): Promise<void> {
 		const runner = this.runner ? view.plugin(this.runner) : null;
 		const report = await runner?.voiceReport();
@@ -574,6 +677,7 @@ export default class ProsePrincePlugin extends Plugin {
 		this.renderLens();
 		this.refreshEditors();
 		this.renderReadability();
+		this.refreshOutline();
 	}
 
 	/** Re-apply highlighting in every open Markdown editor. */

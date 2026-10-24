@@ -34,6 +34,8 @@ export interface ProsePrinceSettings {
 	/** Optional online word lookups (Datamuse). Off unless the writer switches them on. */
 	lookup: LookupSettings;
 	dialogue: DialogueSettings;
+	/** The sidebar counts every check, not just what the lenses show. */
+	outlineAllChecks: boolean;
 }
 
 export interface DialogueSettings {
@@ -274,6 +276,7 @@ function defaults(): ProsePrinceSettings {
 		characterFolder: "",
 		folders: [],
 		dialogue: { dimNarration: true, highlightsInDialogue: false },
+		outlineAllChecks: false,
 		lookup: { enabled: false, apiKey: "", hoverCards: true, rightClick: true, hideRare: false, history: true },
 	};
 }
