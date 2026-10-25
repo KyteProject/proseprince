@@ -20,13 +20,18 @@ export interface ReadabilityReport {
 }
 
 export function combine(stats: ParagraphStats[]): ParagraphStats {
-	const out: ParagraphStats = { words: 0, sentences: 0, syllables: 0, dialogueWords: 0, sentenceWords: [] };
+	const out: ParagraphStats = { words: 0, sentences: 0, syllables: 0, dialogueWords: 0, sentenceWords: [], narrationWords: 0, adjectives: 0, lyAdverbs: 0, ratedNouns: 0, concreteNouns: 0 };
 	for (const s of stats) {
 		out.words += s.words;
 		out.sentences += s.sentences;
 		out.syllables += s.syllables;
 		out.dialogueWords += s.dialogueWords;
 		out.sentenceWords.push(...s.sentenceWords);
+		out.narrationWords += s.narrationWords ?? 0;
+		out.adjectives += s.adjectives ?? 0;
+		out.lyAdverbs += s.lyAdverbs ?? 0;
+		out.ratedNouns += s.ratedNouns ?? 0;
+		out.concreteNouns += s.concreteNouns ?? 0;
 	}
 	return out;
 }
@@ -74,4 +79,39 @@ export function dialogueBand(ratio: number): Band {
 	if (ratio < 0.15) return { label: "Narration-led", hint: "Little dialogue. Fine for interiority or description; scenes may feel told." };
 	if (ratio < 0.45) return { label: "Balanced", hint: "Dialogue and narration share the page." };
 	return { label: "Dialogue-led", hint: "Mostly talk. Fast to read; make sure the setting and bodies don't vanish." };
+}
+
+/** Sentences longer than this many words count as long. */
+export const LONG_SENTENCE = 25;
+
+/**
+ * Plain style figures for the sidebar: how long sentences run, and in narration how many words are
+ * adjectives or -ly adverbs and how many nouns are concrete. Descriptive, for comparing your own
+ * drafts and beats; not a score.
+ */
+export interface StyleFigures {
+	wordsPerSentence: number | null;
+	medianSentence: number | null;
+	/** Share of sentences over LONG_SENTENCE words. */
+	longSentences: number | null;
+	/** Shares of narration words. */
+	adjectives: number | null;
+	lyAdverbs: number | null;
+	/** Share of rated narration nouns that are concrete. */
+	concreteNouns: number | null;
+}
+
+export function styleOf(s: ParagraphStats): StyleFigures {
+	const lengths = [...s.sentenceWords].sort((a, b) => a - b);
+	const n = lengths.length;
+	const median = n ? (n % 2 ? lengths[(n - 1) / 2]! : (lengths[n / 2 - 1]! + lengths[n / 2]!) / 2) : null;
+	const share = (part: number, whole: number) => (whole > 0 ? part / whole : null);
+	return {
+		wordsPerSentence: share(s.words, s.sentences),
+		medianSentence: median,
+		longSentences: share(lengths.filter((l) => l > LONG_SENTENCE).length, n),
+		adjectives: share(s.adjectives ?? 0, s.narrationWords ?? 0),
+		lyAdverbs: share(s.lyAdverbs ?? 0, s.narrationWords ?? 0),
+		concreteNouns: (s.ratedNouns ?? 0) >= 5 ? share(s.concreteNouns ?? 0, s.ratedNouns ?? 0) : null,
+	};
 }

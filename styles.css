@@ -424,3 +424,4 @@ body.theme-dark {
 .pp-who-missing { color: var(--color-orange, #e58e26); text-decoration: underline dotted; text-underline-offset: 2px; }
 .pp-who-described { font-style: italic; color: var(--text-faint); }
 .pp-who-unlisted { color: var(--color-orange, #e58e26); font-style: italic; }
+.pp-outline-style { grid-template-columns: repeat(2, 1fr); margin-top: 6px; }

@@ -1,4 +1,5 @@
-import type { ParagraphStats, SentenceInfo, Token } from "./types";
+import { concreteness } from "./concreteness";
+import { CONCRETE_NOUN, type ParagraphStats, type SentenceInfo, type Token } from "./types";
 
 /** Contraction pieces wink splits off ("was" + "n't"); not words of their own. */
 const CLITIC = /^(n't|'s|'re|'m|'ll|'d|'ve|’s|’re|’m|’ll|’d|’ve|n’t)$/i;
@@ -54,7 +55,7 @@ export function measure(tokens: Token[]): { sentences: SentenceInfo[]; stats: Pa
 		else groups.set(t.sentence, [t]);
 	}
 	const sentences: SentenceInfo[] = [];
-	const stats: ParagraphStats = { words: 0, sentences: 0, syllables: 0, dialogueWords: 0, sentenceWords: [] };
+	const stats: ParagraphStats = { words: 0, sentences: 0, syllables: 0, dialogueWords: 0, sentenceWords: [], narrationWords: 0, adjectives: 0, lyAdverbs: 0, ratedNouns: 0, concreteNouns: 0 };
 	for (const group of groups.values()) {
 		const words = group.filter(isCountedWord);
 		if (words.length === 0) continue;
@@ -66,6 +67,19 @@ export function measure(tokens: Token[]): { sentences: SentenceInfo[]; stats: Pa
 		stats.syllables += syl;
 		stats.dialogueWords += words.filter((w) => w.inDialogue).length;
 		stats.sentenceWords.push(words.length);
+		for (const w of words) {
+			if (w.inDialogue) continue;
+			stats.narrationWords++;
+			if (w.pos === "ADJ") stats.adjectives++;
+			else if (w.pos === "ADV" && /^\p{L}{3,}ly$/u.test(w.text)) stats.lyAdverbs++;
+			else if (w.pos === "NOUN") {
+				const c = concreteness(w.lemma) ?? concreteness(w.text);
+				if (c !== null) {
+					stats.ratedNouns++;
+					if (c >= CONCRETE_NOUN) stats.concreteNouns++;
+				}
+			}
+		}
 	}
 	return { sentences, stats };
 }
