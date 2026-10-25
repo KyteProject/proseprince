@@ -3,7 +3,7 @@ import { Decoration, type DecorationSet, EditorView, hoverTooltip, ViewPlugin, t
 import { filterHighlights } from "../analysis/filter";
 import { excludedBlocks, maskInline, type Range } from "../analysis/mask";
 import { namesIn, namesInText } from "../analysis/names";
-import { combine, report, type ReadabilityReport } from "../analysis/readability";
+import { combine, report, type ReadabilityReport, type StyleFigures, styleOf } from "../analysis/readability";
 import { attribute, type Attribution, colourSlots, type ParagraphDialogue, pinIn, resetsTurns, speakersIn, UNTAGGED_RUN, untaggedRuns } from "../analysis/dialogue/attribute";
 import type { SpeakerKind } from "../analysis/dialogue/speech";
 import { longestStretches, type Stretch, type Voice, type VoiceLine, voices } from "../analysis/dialogue/voices";
@@ -124,6 +124,8 @@ export interface BeatRow {
 	who?: { name: string; status: "speaks" | "present" | "missing" | "described" }[];
 	/** People who speak in the beat but aren't in its `who:` line. */
 	unlisted?: string[];
+	/** Sentence length, adjectives, -ly adverbs and concrete nouns in this beat. */
+	style?: StyleFigures;
 	/** Share of the beat's words that are speech. */
 	dialogue: number;
 	issues: number;
@@ -139,6 +141,7 @@ export interface OutlineReport {
 	characters: number;
 	paragraphs: number;
 	readability: ReadabilityReport | null;
+	style: StyleFigures | null;
 	/** Share of prose words that are speech. */
 	dialogueShare: number;
 	/** Issue positions (document offsets) per check, for counts and jump-to. */
@@ -622,6 +625,8 @@ export class HighlightRunner {
 		const sentences: OutlineReport["sentences"] = [];
 		const content: { word: string; at: number }[] = [];
 		const stats: ParagraphStats[] = [];
+		const beatStats: ParagraphStats[][] = beats.map(() => []);
+		const openingStats: ParagraphStats[] = [];
 		for (const p of all) {
 			const result = host.cache.get(this.keyOf(p));
 			// Line by line: a heading or callout can share a paragraph with prose.
@@ -642,6 +647,8 @@ export class HighlightRunner {
 			if (prose) paragraphs++;
 			if (!result) continue;
 			stats.push(result.stats);
+			const b = beatAt(beats, p.from);
+			(b < 0 ? openingStats : beatStats[b]!).push(result.stats);
 			for (const s of speechIn.get(p.from) ?? []) {
 				const n = countWords(maskInline(p.text.slice(s.from, s.to)));
 				speech += n;
@@ -662,7 +669,11 @@ export class HighlightRunner {
 				if ("pos" in h.kind && ["NOUN", "VERB", "ADJ", "ADV"].includes(h.kind.pos)) content.push({ word: p.text.slice(h.from, h.to), at: p.from + h.from });
 			}
 		}
-		rows.forEach((r, i) => (r.dialogue = r.words ? speechWords[i]! / r.words : 0));
+		rows.forEach((r, i) => {
+			r.dialogue = r.words ? speechWords[i]! / r.words : 0;
+			if (beatStats[i]!.length) r.style = styleOf(combine(beatStats[i]!));
+		});
+		if (openingStats.length) opening.style = styleOf(combine(openingStats));
 		this.checkCast(text, beats, rows, d);
 		opening.dialogue = opening.words ? openingSpeech / opening.words : 0;
 
@@ -687,6 +698,7 @@ export class HighlightRunner {
 			characters,
 			paragraphs,
 			readability: stats.length ? report(combine(stats)) : null,
+			style: stats.length ? styleOf(combine(stats)) : null,
 			dialogueShare: words ? speech / words : 0,
 			issues,
 			allChecks,

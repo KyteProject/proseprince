@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { analyzeParagraph } from "../src/analysis/analyze";
+import { combine, styleOf } from "../src/analysis/readability";
 import { beatAt, beatNotes, beatsOf, countLine, headingsIn, isNamedPerson, repeatedWords } from "../src/analysis/outline";
 
 describe("outline", () => {
@@ -45,5 +47,23 @@ describe("outline", () => {
 		expect(isNamedPerson("Eufemie Kanda")).toBe(true);
 		expect(isNamedPerson("Unnamed partner")).toBe(false);
 		expect(isNamedPerson("the inspector")).toBe(false);
+	});
+});
+
+describe("style figures", () => {
+	it("counts sentence length and narration word choice", () => {
+		const { stats } = analyzeParagraph(`The old door creaked slowly. She walked quickly to the table and sat. "Really, truly lovely," she said.`, 25);
+		const s = styleOf(stats);
+		expect(s.wordsPerSentence).toBeCloseTo(stats.words / stats.sentences);
+		expect(stats.lyAdverbs).toBe(2);
+		expect(stats.adjectives).toBe(1);
+		expect(stats.narrationWords).toBeLessThan(stats.words);
+		expect(styleOf(combine([stats, stats])).adjectives).toBeCloseTo(s.adjectives!);
+	});
+
+	it("needs a few rated nouns before giving a concrete share", () => {
+		expect(styleOf(analyzeParagraph("The door.", 25).stats).concreteNouns).toBeNull();
+		const s = styleOf(analyzeParagraph("The door, the table, the knife, the cup and the stone sat beside her fear.", 25).stats);
+		expect(s.concreteNouns).toBeGreaterThan(0.7);
 	});
 });

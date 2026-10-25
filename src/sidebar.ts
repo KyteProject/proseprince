@@ -3,6 +3,7 @@ import { ItemView, type WorkspaceLeaf } from "obsidian";
 import { rhythmTier } from "./analysis/rhythm";
 import { type CheckKind, kindSlug } from "./analysis/types";
 import { READING_WPM } from "./analysis/outline";
+import { LONG_SENTENCE, type StyleFigures } from "./analysis/readability";
 import type { OutlineReport } from "./editor/highlighter";
 import { CHECK_GROUPS, CHECK_INFO } from "./settingsModel";
 
@@ -28,6 +29,8 @@ export interface OutlineContext {
 const SCENE_FIELDS: [string, string][] = [["status", "Status"], ["pov", "POV"], ["setting", "Setting"], ["day", "Day"], ["characters", "Characters"]];
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+/** One decimal for small shares: 1.2% of words being -ly adverbs differs from 0.4%. */
+const pct1 = (x: number) => `${(x * 100).toFixed(x < 0.1 ? 1 : 0)}%`;
 /** At most this many bars in the rhythm sparkline. */
 const SPARK_BARS = 90;
 const num = (x: number) => x.toLocaleString();
@@ -173,6 +176,7 @@ export class OutlineView extends ItemView {
 		} else if (session) {
 			body.createDiv({ cls: "pp-outline-note", text: `${session > 0 ? "+" : "−"}${num(Math.abs(session))} words this session. Add target: to the frontmatter for a progress bar.` });
 		}
+		if (r.style) this.style(body, r.style);
 		const ease = r.readability?.readingEase;
 		if (ease) {
 			const parts = [`Reading ease ${Math.round(ease.score)} (${ease.band.label.toLowerCase()})`];
@@ -181,6 +185,28 @@ export class OutlineView extends ItemView {
 			const line = body.createDiv({ cls: "pp-outline-note", text: parts.join(" · ") });
 			line.setAttribute("aria-label", [ease.band.hint, r.readability?.variety?.band.hint].filter(Boolean).join("\n"));
 		}
+	}
+
+	/** Sentence length and word choice in narration: descriptive, for comparing your own beats and drafts. */
+	private style(body: HTMLElement, s: StyleFigures): void {
+		const grid = body.createDiv({ cls: "pp-outline-stats pp-outline-style" });
+		const stat = (value: string, label: string, title: string) => {
+			const cell = grid.createDiv({ cls: "pp-outline-stat" });
+			cell.createDiv({ cls: "pp-outline-stat-value", text: value });
+			cell.createDiv({ cls: "pp-outline-stat-label", text: label });
+			cell.setAttribute("aria-label", title);
+		};
+		const share = (x: number | null) => (x === null ? "–" : pct1(x));
+		if (s.wordsPerSentence !== null) {
+			stat(
+				s.wordsPerSentence.toFixed(1),
+				"words / sentence",
+				`Average sentence length. Median ${s.medianSentence ?? "–"}; ${share(s.longSentences)} of sentences run over ${LONG_SENTENCE} words. The rhythm bars show the spread.`,
+			);
+		}
+		stat(share(s.adjectives), "adjectives", "Share of narration words that are adjectives. Compare beats and drafts; there's no right number.");
+		stat(share(s.lyAdverbs), "-ly adverbs", "Share of narration words that are -ly adverbs (the ones King warns about).");
+		stat(share(s.concreteNouns), "concrete nouns", "Share of narration nouns you could see or touch (rated 3.5+ of 5 for concreteness by Brysbaert et al.). Abstract nouns tell; concrete ones show.");
 	}
 
 	private beats(root: HTMLElement, r: OutlineReport, ctx: OutlineContext): void {
@@ -211,9 +237,14 @@ export class OutlineView extends ItemView {
 				bar.style.width = `${Math.max(4, (b.words / most) * 100)}%`;
 			}
 			bar.createDiv({ cls: "pp-beat-speech" }).style.width = `${b.dialogue * 100}%`;
+			const st = b.style;
 			const tip = [
 				b.target ? `${num(b.words)} of ${num(b.target)} words (${pct(b.words / b.target)})` : `${num(b.words)} words`,
 				`${pct(b.dialogue)} dialogue`,
+				...(st?.wordsPerSentence ? [`${st.wordsPerSentence.toFixed(1)} words a sentence`] : []),
+				...(st?.adjectives !== null && st?.adjectives !== undefined ? [`adjectives ${pct1(st.adjectives)}`] : []),
+				...(st?.lyAdverbs !== null && st?.lyAdverbs !== undefined ? [`-ly ${pct1(st.lyAdverbs)}`] : []),
+				...(st?.concreteNouns !== null && st?.concreteNouns !== undefined ? [`concrete nouns ${pct(st.concreteNouns)}`] : []),
 			].join(" · ");
 			row.setAttribute("aria-label", b.change ? `${tip}\nChange: ${b.change}` : tip);
 			row.onclick = () => this.jump(Math.max(0, b.from));

@@ -105,7 +105,17 @@ export interface ParagraphStats {
 	syllables: number;
 	dialogueWords: number;
 	sentenceWords: number[];
+	/** Narration only (dialogue is a character's voice): words, adjectives, -ly adverbs. */
+	narrationWords: number;
+	adjectives: number;
+	lyAdverbs: number;
+	/** Narration nouns with a concreteness rating, and how many of them are concrete (rated 3.5 or more of 5). */
+	ratedNouns: number;
+	concreteNouns: number;
 }
+
+/** Concreteness at or above which a noun counts as concrete (Brysbaert et al.'s 1–5 scale). */
+export const CONCRETE_NOUN = 3.5;
 
 export interface ParagraphResult {
 	highlights: Highlight[];
