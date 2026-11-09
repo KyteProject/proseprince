@@ -1,5 +1,7 @@
 import type { EditorView, ViewPlugin } from "@codemirror/view";
-import { debounce, type Editor, editorInfoField, MarkdownView, Menu, Notice, Plugin, requestUrl, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { debounce, type Editor, editorInfoField, FuzzySuggestModal, MarkdownView, Menu, normalizePath, Notice, Plugin, requestUrl, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { type Exercise, EXERCISES, exerciseById, exerciseNote } from "./exercises/definitions";
+import type { ExerciseContext } from "./editor/highlighter";
 import type { ReadabilityReport } from "./analysis/readability";
 import { CHECK_KINDS, POS_CATEGORIES } from "./analysis/types";
 import { ResultCache } from "./editor/cache";
@@ -212,6 +214,21 @@ export default class ProsePrincePlugin extends Plugin {
 				new Notice(`ProsePrince: highlights inside dialogue ${on ? "on" : "off"}`);
 			},
 		});
+		this.addCommand({ id: "start-exercise", name: "Start exercise…", callback: () => new ExercisePicker(this).open() });
+		this.addCommand({
+			id: "start-imitation",
+			name: "Start imitation exercise from selection",
+			editorCheckCallback: (checking: boolean, editor: Editor) => {
+				const selection = editor.getSelection().trim();
+				if (!selection) return false;
+				if (!checking) void this.startExercise(exerciseById("imitation")!, selection);
+				return true;
+			},
+		});
+		// A note becoming (or ceasing to be) an exercise switches its lens.
+		this.registerEvent(this.app.metadataCache.on("changed", (_file, _data, cache) => {
+			if (cache.frontmatter?.["proseprince-exercise"] !== undefined) this.refreshEditors();
+		}));
 		this.addCommand({
 			id: "dialogue-voices",
 			name: "Dialogue: voices in this note",
@@ -431,6 +448,33 @@ export default class ProsePrincePlugin extends Plugin {
 		this.saveLookupHistory.run();
 		this.client.dispose();
 		this.cache.clear();
+	}
+
+	/** The exercise an editor's note is for: frontmatter `proseprince-exercise:` naming a known exercise. */
+	exerciseOf(view: EditorView): ExerciseContext | null {
+		const file = view.state.field(editorInfoField, false)?.file;
+		const fm = file ? this.app.metadataCache.getFileCache(file)?.frontmatter : undefined;
+		const exercise = fm ? exerciseById(String(fm["proseprince-exercise"] ?? "")) : undefined;
+		if (!exercise) return null;
+		const str = (v: unknown) => (v === null || v === undefined ? undefined : String(v));
+		return { exercise, subject: str(fm!.subject), written: str(fm!.written) };
+	}
+
+	/** Create a new exercise note in the exercise folder and open it in a new tab. */
+	async startExercise(exercise: Exercise, model?: string): Promise<void> {
+		if (exercise.needsModel && !model) {
+			new Notice("Select a passage you admire in any note, then run \"Start imitation exercise from selection\".");
+			return;
+		}
+		const now = new Date();
+		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+		const folder = normalizePath(this.settings.exerciseFolder.trim() || "_proseprince/Exercises");
+		if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
+		let path = normalizePath(`${folder}/${today} ${exercise.title}.md`);
+		for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) path = normalizePath(`${folder}/${today} ${exercise.title} ${n}.md`);
+		const file = await this.app.vault.create(path, exerciseNote(exercise, today, model));
+		await this.app.workspace.getLeaf("tab").openFile(file);
+		new Notice(`ProsePrince: ${exercise.title}. The brief is folded at the top; only this exercise's rules are flagged.`);
 	}
 
 	/** Open the outline in the right sidebar (or reveal it if it's already there). */
@@ -713,6 +757,27 @@ function lookupRange(editor: Editor): { line: number; fromCh: number; toCh: numb
 	const text = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 	if (!text || text.length > 60 || !/\p{L}/u.test(text)) return null;
 	return { line: from.line, fromCh: from.ch + lead, toCh: from.ch + lead + text.length, text };
+}
+
+/** "Start exercise…": the exercises with the skill each trains. */
+class ExercisePicker extends FuzzySuggestModal<Exercise> {
+	constructor(private readonly plugin: ProsePrincePlugin) {
+		super(plugin.app);
+		this.setPlaceholder("Pick an exercise: one skill at a time");
+	}
+
+	getItems(): Exercise[] {
+		return EXERCISES;
+	}
+
+	getItemText(e: Exercise): string {
+		return `${e.title}: ${e.skill}`;
+	}
+
+	onChooseItem(e: Exercise): void {
+		const editor = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+		void this.plugin.startExercise(e, e.needsModel ? editor?.getSelection().trim() || undefined : undefined);
+	}
 }
 
 function describe(label: string, r: ReadabilityReport | null): string {

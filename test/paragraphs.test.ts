@@ -24,4 +24,10 @@ describe("applyExclusions", () => {
 		const third = paragraphs[2]!;
 		expect(doc.sliceString(third.from, third.from + third.text.length).endsWith("Third.")).toBe(true);
 	});
+
+	it("blanks callouts and quotes, even one joined to the prose above", () => {
+		const note = Text.of(["She ran.", "> [!todo] Cut this", "> She very slowly walked.", "", "> [!note]", "> Notes.", "", "> A quoted letter.", "", "Then she stopped."]);
+		const paragraphs = applyExclusions(paragraphsAround(note, [{ from: 0, to: note.length }]), excludedBlocks(note.toString()));
+		expect(paragraphs.map((p) => p.text.trim())).toEqual(["She ran.", "Then she stopped."]);
+	});
 });

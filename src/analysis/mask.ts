@@ -60,18 +60,30 @@ export interface Range {
 
 /**
  * Block-level regions that are never prose, found by scanning the whole document:
- * frontmatter, fenced code, math blocks and multi-line comments. Needs document context,
- * because a fence can span blank lines.
+ * frontmatter, fenced code, math blocks, multi-line comments, and quotes and callouts (`>`,
+ * `> [!note]`, which hold notes to the writer, not the story, and match the word counts).
+ * Needs document context, because a fence can span blank lines.
  */
 export function excludedBlocks(doc: string): Range[] {
 	const ranges: Range[] = [];
 	const lines = doc.split("\n");
 	let offset = 0;
 	let open: { kind: "fence" | "math" | "comment" | "frontmatter"; marker: string; from: number } | null = null;
+	let quote: Range | null = null;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]!;
 		const lineEnd = offset + line.length;
 		const trimmed = line.trim();
+		if (quote) {
+			// A quote or callout ends at the first line that isn't quoted.
+			if (trimmed.startsWith(">")) {
+				quote.to = lineEnd;
+				offset = lineEnd + 1;
+				continue;
+			}
+			ranges.push(quote);
+			quote = null;
+		}
 		if (open) {
 			const closes =
 				(open.kind === "fence" && trimmed.startsWith(open.marker)) ||
@@ -86,12 +98,14 @@ export function excludedBlocks(doc: string): Range[] {
 			open = { kind: "frontmatter", marker: "---", from: offset };
 		} else {
 			const fence = /^(`{3,}|~{3,})/.exec(trimmed);
-			if (fence) open = { kind: "fence", marker: fence[1]!, from: offset };
+			if (trimmed.startsWith(">")) quote = { from: offset, to: lineEnd };
+			else if (fence) open = { kind: "fence", marker: fence[1]!, from: offset };
 			else if (trimmed.startsWith("$$") && !(trimmed.length > 2 && trimmed.endsWith("$$"))) open = { kind: "math", marker: "$$", from: offset };
 			else if (trimmed.startsWith("%%") && (trimmed.match(/%%/g)?.length ?? 0) === 1) open = { kind: "comment", marker: "%%", from: offset };
 		}
 		offset = lineEnd + 1;
 	}
+	if (quote) ranges.push(quote);
 	if (open) ranges.push({ from: open.from, to: doc.length });
 	return ranges;
 }

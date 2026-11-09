@@ -358,6 +358,16 @@ export class ProsePrinceSettingTab extends PluginSettingTab {
 			text: "The Dialogue lens underlines each line in its speaker's colour, from a tag (\"Linh said\", \"the inspector said\"), an action beat, or turn-taking in a two-person exchange; guesses are dotted grey. Hover a line to see why, or to pin the speaker with a hidden %% speaker: Name %% comment. Set a colour with colour: #hex on a character note.",
 		});
 
+		// ── Exercises ──────────────────────────────────────────────────────────
+		new Setting(containerEl).setName("Exercises").setHeading();
+		new Setting(containerEl)
+			.setName("Exercise folder")
+			.setDesc("Where \"Start exercise…\" creates practice notes. In an exercise note the usual lenses switch off and only the exercise's rules are flagged.")
+			.addText((t) => t.setPlaceholder("_proseprince/Exercises").setValue(s.exerciseFolder).onChange(async (v) => {
+				s.exerciseFolder = v.trim();
+				await save();
+			}));
+
 		// ── Word lookups (online) ──────────────────────────────────────────────
 		new Setting(containerEl).setName("Word lookups (online)").setHeading();
 		containerEl.createEl("p", {

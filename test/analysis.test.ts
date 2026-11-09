@@ -39,6 +39,22 @@ describe("excludedBlocks", () => {
 		const blocks = excludedBlocks(doc).map((r) => doc.slice(r.from, r.to));
 		expect(blocks).toEqual(["---\ntitle: x\n---", "```\ncode\n\nmore code\n```"]);
 	});
+
+	it("finds callouts and plain quotes, folded or nested", () => {
+		const doc = "Prose.\n> [!todo] Fix this\n> She very slowly walked.\n>\n> More notes.\nAfter.\n\n> A quoted letter.\n\n> > [!note]- Folded\n> > inside\n\nEnd.";
+		const blocks = excludedBlocks(doc).map((r) => doc.slice(r.from, r.to));
+		expect(blocks).toEqual(["> [!todo] Fix this\n> She very slowly walked.\n>\n> More notes.", "> A quoted letter.", "> > [!note]- Folded\n> > inside"]);
+	});
+
+	it("leaves a quote inside fenced code to the fence", () => {
+		const doc = "```\n> not a quote\n```\nProse.";
+		expect(excludedBlocks(doc).map((r) => doc.slice(r.from, r.to))).toEqual(["```\n> not a quote\n```"]);
+	});
+
+	it("ends a callout at the end of the document", () => {
+		const doc = "Prose.\n\n> [!info]\n> Last words";
+		expect(excludedBlocks(doc).map((r) => doc.slice(r.from, r.to))).toEqual(["> [!info]\n> Last words"]);
+	});
 });
 
 describe("dialogueRanges", () => {
