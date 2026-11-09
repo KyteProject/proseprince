@@ -44,6 +44,8 @@ body {
 	--pp-two-speakers: rgba(232, 67, 147, 0.2);
 	--pp-untagged-run: rgba(108, 92, 231, 0.16);
 	--pp-quoted-thought: rgba(0, 184, 148, 0.18);
+	--pp-named-emotion: rgba(232, 67, 147, 0.18);
+	--pp-action-clause: rgba(0, 150, 199, 0.18);
 
 	/* rhythm: short (cool) to long (warm) */
 	--pp-rhythm-1: rgba(52, 152, 219, 0.1);
@@ -104,6 +106,8 @@ body.theme-dark {
 	--pp-two-speakers: rgba(253, 121, 168, 0.24);
 	--pp-untagged-run: rgba(162, 155, 254, 0.2);
 	--pp-quoted-thought: rgba(85, 239, 196, 0.2);
+	--pp-named-emotion: rgba(253, 121, 168, 0.22);
+	--pp-action-clause: rgba(116, 185, 255, 0.22);
 
 	--pp-rhythm-1: rgba(93, 173, 226, 0.12);
 	--pp-rhythm-2: rgba(72, 201, 176, 0.12);
@@ -149,6 +153,8 @@ body.theme-dark {
 .pp-check-two-speakers { background-color: var(--pp-two-speakers); }
 .pp-check-untagged-run { background-color: var(--pp-untagged-run); }
 .pp-check-quoted-thought { background-color: var(--pp-quoted-thought); }
+.pp-check-named-emotion { background-color: var(--pp-named-emotion); }
+.pp-check-action-clause { background-color: var(--pp-action-clause); }
 
 .pp-rhythm { border-radius: 2px; }
 .pp-rhythm-1 { background-color: var(--pp-rhythm-1); }
@@ -246,6 +252,8 @@ body.theme-dark {
 .pp-setting-check-twoSpeakers .setting-item-name { background: var(--pp-two-speakers); }
 .pp-setting-check-untaggedRun .setting-item-name { background: var(--pp-untagged-run); }
 .pp-setting-check-quotedThought .setting-item-name { background: var(--pp-quoted-thought); }
+.pp-setting-check-namedEmotion .setting-item-name { background: var(--pp-named-emotion); }
+.pp-setting-check-actionClause .setting-item-name { background: var(--pp-action-clause); }
 .pp-setting-check-cliche .setting-item-name,
 [class*="pp-setting-check-"] .setting-item-name { display: inline-block; padding: 0 4px; border-radius: 3px; }
 
@@ -425,3 +433,18 @@ body.theme-dark {
 .pp-who-described { font-style: italic; color: var(--text-faint); }
 .pp-who-unlisted { color: var(--color-orange, #e58e26); font-style: italic; }
 .pp-outline-style { grid-template-columns: repeat(2, 1fr); margin-top: 6px; }
+
+/* Exercise notes: only what breaks the exercise's rules. */
+.pp-exercise-breach { background-color: rgba(229, 142, 38, 0.22); border-bottom: 1px dashed rgba(229, 142, 38, 0.8); }
+body.theme-dark .pp-exercise-breach { background-color: rgba(255, 179, 92, 0.2); border-bottom-color: rgba(255, 179, 92, 0.75); }
+.pp-exercise-skill { margin-top: 0; font-style: italic; }
+.pp-exercise-part { margin-top: 8px; font-weight: 600; }
+.pp-exercise-mark { width: 1.1em; text-align: center; flex: none; }
+.pp-exercise-rule.is-ok .pp-exercise-mark { color: var(--color-green, #2a9d4b); }
+.pp-exercise-rule.is-fail .pp-exercise-mark { color: var(--color-orange, #e58e26); }
+.pp-exercise-rule.is-pending { color: var(--text-muted); }
+.pp-exercise-rule.is-static { cursor: default; }
+.pp-exercise-rule.is-static:hover { background: none; }
+.pp-shape-compare { height: 28px; }
+.pp-spark-model { background: var(--text-faint); }
+.pp-spark-yours { background: var(--interactive-accent); }

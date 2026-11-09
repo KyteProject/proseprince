@@ -13,7 +13,7 @@ ProsePrince bundles or adapts the following works. Thank you to their authors.
 | [Creative Thesaurus](https://github.com/amancioandre/creative-thesaurus), André Amancio | Design ideas for the lookup (selection, then the word at the cursor; mousedown-safe picking; Datamuse "means like" as a fallback). No code copied | MIT |
 | Brysbaert, M., Warriner, A. B., & Kuperman, V. (2014). Concreteness ratings for 40 thousand generally known English word lemmas. *Behavior Research Methods*, 46, 904–911. | Concreteness norms for metaphor candidates (`src/analysis/lexicon/concreteness.data.ts`, as compacted by Creative Writer) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
-The King and Le Guin lenses describe ideas from *On Writing* (Stephen King) and *Steering the Craft* (Ursula K. Le Guin) in our own words; no text from either book is included.
+The King and Le Guin lenses describe ideas from *On Writing* (Stephen King) and *Steering the Craft* (Ursula K. Le Guin) in our own words; no text from either book is included. The exercises, the named-emotion check and the action-clause check likewise follow *Steering the Craft* and *Self-Editing for Fiction Writers* (Renni Browne & Dave King), paraphrased with chapter and page references so writers can read the originals; no text from either book is included.
 
 ---
 

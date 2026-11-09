@@ -4,6 +4,7 @@ import { maskInline } from "./mask";
 import { measure } from "./rhythm";
 import { mannerAdverbs } from "./rules/adverbs";
 import { filterWords } from "./rules/filterWords";
+import { actionClauses, namedEmotions } from "./rules/narration";
 import { metaphors } from "./rules/metaphor";
 import { passive } from "./rules/passive";
 import { nominalizations, openers, weakVerbs } from "./rules/sentences";
@@ -35,6 +36,8 @@ export function analyzeParagraph(text: string, echoWindow: number, names: readon
 			...redundancies(words),
 			...intensity(words),
 			...filterWords(words),
+			...namedEmotions(words),
+			...actionClauses(tokens),
 			...passive(words, tokens),
 			...weakVerbs(words),
 			...nominalizations(words),

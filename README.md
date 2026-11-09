@@ -82,6 +82,22 @@ The ribbon's scroll icon (or *Open outline sidebar*) opens an outline for the no
 - **Dialogue**: speakers with their colour, lines and share (hover for more; click to walk through their lines), how many lines are certain, guessed or unclear, long untagged runs, and the voices window.
 - **Repeated words**: the note's most used nouns, verbs, adjectives and adverbs (names and world terms left out), each a button that walks through its uses.
 
+## Exercises
+
+Practise one skill at a time in separate notes, away from the story. *Start exercise…* (or *Start imitation exercise from selection*) creates a note in `_proseprince/Exercises/` (change it in settings) with the brief folded at the top, a heading for each part, and a **Look back** list of questions only you can answer. In an exercise note the usual lenses switch off: only what breaks the exercise's rules is marked, and the sidebar ticks each rule off as you write (click a failing one to walk through the places).
+
+| Exercise | Trains | From |
+|---|---|---|
+| **Short and long** | Building sentences: a 100–150-word paragraph of sentences of seven words or fewer (no fragments), then one sentence of up to 350 words | *Steering the Craft*, ch. 3 |
+| **Clean sequence** | Chaining sentences: physical action with no -ing or "as" clauses, no -ly adverbs, "then" at most once, varied openings; then the same as one long "and" sentence | ProsePrince, after *Self-Editing for Fiction Writers* chs. 11–12 |
+| **Chastity** | Description: 200–350 words with no adjectives, adverbs or dialogue (a few time words allowed) | *Steering the Craft*, ch. 5 |
+| **Feel it without naming it** | Moving the story through action: a strong feeling never named in the narration, then a place where something happened without naming the event (`subject:` in the frontmatter) | *Self-Editing*, ch. 1; *Steering the Craft*, ch. 9 |
+| **Imitation** | Learning a writer's moves: your own scene in the sentence shapes of a passage you select, the model's lengths shown above yours in the sidebar | *Steering the Craft*, chs. 1 and 8 |
+
+Le Guin's advice holds: when you're roughly done, put it away for a day or two and reread it aloud before ticking the boxes. The sidebar says when.
+
+Two new checks came with the exercises and are also available for your own writing, off in every lens until you switch them on in settings: **Named emotions** (feelings stated in the narration: furious, relieved) and **Action clauses** ("Pulling off her gloves, she turned").
+
 ## Where it runs
 
 Settings → **Where ProsePrince runs**: list the folders you write prose in (with autocomplete), and only notes inside them (and their subfolders) are highlighted. With no folders set it runs everywhere. A note's frontmatter always wins: `proseprince: true` switches it on outside those folders, `proseprince: false` switches it off inside them; the **Toggle ProsePrince for this note** command sets the flag for you. Outside the prose folders the status-bar icons dim.
@@ -134,6 +150,8 @@ What goes online: only the word (or selected phrase) you look up, sent to [Datam
 
 Hovering a highlight shows its note and a button such as *Not a cliché here*. It appends a hidden comment like `%% not cliche %%` to the paragraph, which switches that check off there. Obsidian doesn't render `%%` comments, and they're ignored by the tagger. Delete the comment to switch the check back on.
 
+Some parts of a note are never checked: frontmatter, code, math, `%% … %%` comments, and quotes and callouts (any `>` line, including `> [!todo]`, `> [!note]-` and the like), since those are notes to yourself rather than the story. They're left out of the word counts too.
+
 ## Install for development
 
 ```bash
@@ -172,10 +190,10 @@ Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rule
 
 ## Roadmap
 
-Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14).
+Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18).
 
 - Remaining Le Guin chapters: tense consistency (6), point of view and head-hopping (7–8; the frontmatter `pov` and the dialogue pronoun tracking are a start), telling markers (9), crowding map (10), sound (1; the lookup card's rhymes are a start).
-- Exercise mode: pick one of *Steering the Craft*'s exercises and flag only what breaks its constraint.
+- More exercises (see `docs/exercise-mode-plan.md`): pure A/B dialogue, person and tense, points of view, cut it to half, beats added to bare dialogue.
 - Writer's own word lists (a Words lens), seeded from the sidebar's repeated words and the words you replace most in lookups; then Accents: words a character would or wouldn't say, building on the voices table.
 - Smaller checks: dangling openers ("Wet and panting, anger surged"), a choppiness hint (high variety but nearly all short sentences), cross-paragraph echoes and openers, an ellipsis followed by narration as an interruption.
 - A cleaner note name finder, so sentence-start capitals aren't taken for names.

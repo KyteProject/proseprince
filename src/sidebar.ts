@@ -5,6 +5,7 @@ import { type CheckKind, kindSlug } from "./analysis/types";
 import { READING_WPM } from "./analysis/outline";
 import { LONG_SENTENCE, type StyleFigures } from "./analysis/readability";
 import type { OutlineReport } from "./editor/highlighter";
+import type { ExerciseReport } from "./exercises/evaluate";
 import { CHECK_GROUPS, CHECK_INFO } from "./settingsModel";
 
 export const OUTLINE_VIEW = "proseprince-outline";
@@ -69,6 +70,47 @@ export class OutlineView extends ItemView {
 		this.render();
 	}
 
+	/** The exercise's rules, part by part, ticked or failed as you write; click a failing rule to walk its breaches. */
+	private exercise(root: HTMLElement, x: ExerciseReport): void {
+		const body = this.section(root, "exercise", `Exercise: ${x.exercise.title}`);
+		body.createDiv({ cls: "pp-outline-note pp-exercise-skill", text: x.exercise.skill });
+		for (const part of x.parts) {
+			if (x.parts.length > 1 || !part.found) body.createDiv({ cls: "pp-exercise-part", text: part.found ? part.heading : `${part.heading} (heading missing)` });
+			for (const rule of part.rules) {
+				const row = body.createDiv({ cls: `pp-outline-row pp-exercise-rule ${rule.ok === true ? "is-ok" : rule.ok === false ? "is-fail" : "is-pending"}` });
+				row.createSpan({ cls: "pp-exercise-mark", text: rule.ok === true ? "✓" : rule.ok === false ? "✗" : "○" });
+				row.createSpan({ cls: "pp-outline-row-name", text: rule.label });
+				row.createSpan({ cls: "pp-outline-row-count", text: rule.detail });
+				if (rule.breaches.length) {
+					const positions = rule.breaches.map((b) => b.from);
+					row.setAttribute("aria-label", "Click to go to the next one");
+					row.onclick = () => this.jump(this.next(`exercise:${part.heading}:${rule.label}`, positions, this.ctx?.cursor ?? 0));
+				} else row.addClass("is-static");
+			}
+		}
+		if (x.shape) this.shapeCompare(body, x.shape);
+		if (x.lookBack.total) body.createDiv({ cls: "pp-outline-note", text: `Look back: ${x.lookBack.done} of ${x.lookBack.total} ticked.` });
+		if (x.reread) {
+			const date = new Date(`${x.reread.from}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+			body.createDiv({ cls: "pp-outline-note", text: x.reread.ready ? "Ready to reread aloud, with fresh eyes, before ticking the boxes." : `Put it away for now: reread it aloud from ${date}.` });
+		}
+	}
+
+	/** Imitation: the model's sentence lengths above yours, bar for bar. */
+	private shapeCompare(body: HTMLElement, shape: { model: number[]; yours: number[] }): void {
+		const max = Math.max(1, ...shape.model, ...shape.yours);
+		const n = Math.max(shape.model.length, shape.yours.length);
+		for (const [label, lengths] of [["Model", shape.model], ["Yours", shape.yours]] as const) {
+			body.createDiv({ cls: "pp-outline-group", text: label });
+			const strip = body.createDiv({ cls: "pp-rhythm-spark pp-shape-compare" });
+			for (let i = 0; i < n; i++) {
+				const bar = strip.createDiv({ cls: `pp-spark-bar ${label === "Model" ? "pp-spark-model" : "pp-spark-yours"}` });
+				bar.style.height = `${lengths[i] === undefined ? 0 : Math.max(5, (lengths[i]! / max) * 100)}%`;
+				bar.setAttribute("aria-label", lengths[i] === undefined ? "Not written yet" : `Sentence ${i + 1}: ${lengths[i]} words`);
+			}
+		}
+	}
+
 	/** Nothing to show (no Markdown note, or ProsePrince is off). */
 	clear(message: string): void {
 		this.report = null;
@@ -105,11 +147,13 @@ export class OutlineView extends ItemView {
 		}
 		root.createDiv({ cls: "pp-outline-title", text: report.title ?? ctx.title });
 		if (report.pending) root.createDiv({ cls: "pp-outline-note", text: `Analysing ${report.pending} more paragraph${report.pending === 1 ? "" : "s"}…` });
+		if (report.exercise) this.exercise(root, report.exercise);
 		this.sceneCard(root, ctx);
 		this.numbers(root, report, ctx);
 		this.beats(root, report, ctx);
 		this.rhythm(root, report, ctx);
-		this.issues(root, report, ctx);
+		// Exercise notes are strict: the exercise's rules replace the usual issues.
+		if (!report.exercise) this.issues(root, report, ctx);
 		this.dialogue(root, report, ctx);
 		this.repeated(root, report, ctx);
 		this.setCursor(ctx.cursor);

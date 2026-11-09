@@ -36,6 +36,8 @@ export interface ProsePrinceSettings {
 	dialogue: DialogueSettings;
 	/** The sidebar counts every check, not just what the lenses show. */
 	outlineAllChecks: boolean;
+	/** Where new exercise notes go. */
+	exerciseFolder: string;
 }
 
 export interface DialogueSettings {
@@ -96,11 +98,13 @@ export const CHECK_INFO: Record<CheckKind, { name: string; desc: string; group: 
 	hedge: { group: "Word choice", short: "a hedge", name: "Hedges", desc: "Uncertainty in the narration: perhaps, seemed, might have, a kind of." },
 	filterWord: { group: "Viewpoint and voice", short: "a filter word", name: "Filter words", desc: "Perception and thought verbs that put the reader behind the character's senses: she saw, he felt, could hear." },
 	passive: { group: "Viewpoint and voice", short: "a passive", name: "Passive voice", desc: "\"The letter was sent\": who sent it? States like \"was tired\" are left alone." },
+	namedEmotion: { group: "Viewpoint and voice", short: "a named emotion", name: "Named emotions", desc: "Feelings stated in the narration (furious, relieved, ashamed) where the scene could show them. From Self-Editing for Fiction Writers. Off in every lens; switch it on here, and it's used by the exercises." },
 	adverb: { group: "Viewpoint and voice", short: "an adverb", name: "Manner adverbs", desc: "-ly adverbs a stronger verb could replace. Stance words like \"suddenly\" are left alone." },
 	tagAdverb: { group: "Viewpoint and voice", short: "a dialogue-tag adverb", name: "Dialogue-tag adverbs", desc: "\"she said softly\": let the line carry the softness." },
 	weakVerb: { group: "Sentences", short: "a weak verb", name: "Weak verbs", desc: "Long sentences carried only by \"to be\"." },
 	nominalization: { group: "Sentences", short: "a nominalisation", name: "Nominalisations", desc: "Actions hidden in nouns: made a decision → decided." },
 	opener: { group: "Sentences", short: "a repeated opener", name: "Repeated openers", desc: "Runs of sentences that start with the same word." },
+	actionClause: { group: "Sentences", short: "an action clause", name: "Action clauses", desc: "Actions held in an -ing or \"as\" clause: \"Pulling off her gloves, she turned\". From Self-Editing for Fiction Writers. Off in every lens; switch it on here, and it's used by the exercises." },
 	stackedModifier: { group: "Modifiers", short: "stacked modifiers", name: "Stacked modifiers", desc: "Two or more adjectives on one noun: the silky green liquid." },
 	participle: { group: "Modifiers", short: "a verb form as adjective", name: "Verb forms as adjectives", desc: "-ed and -ing forms before a noun: his frayed mind." },
 	echo: { group: "Repetition and imagery", short: "an echo", name: "Echoes", desc: "The same word, in any form, repeated within the echo window. Names are ignored." },
@@ -277,6 +281,7 @@ function defaults(): ProsePrinceSettings {
 		folders: [],
 		dialogue: { dimNarration: true, highlightsInDialogue: false },
 		outlineAllChecks: false,
+		exerciseFolder: "_proseprince/Exercises",
 		lookup: { enabled: false, apiKey: "", hoverCards: true, rightClick: true, hideRare: false, history: true },
 	};
 }

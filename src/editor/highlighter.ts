@@ -10,6 +10,8 @@ import { longestStretches, type Stretch, type Voice, type VoiceLine, voices } fr
 import { rhythmTier } from "../analysis/rhythm";
 import { GUIDES, type GuideKey, SUGGESTION_ROWS } from "../analysis/guides";
 import { beatAt, type BeatNotes, beatNotes, beatsOf, countLine, countWords, type Heading, headingsIn, isNamedPerson, isProseLine, repeatedWords } from "../analysis/outline";
+import type { Exercise } from "../exercises/definitions";
+import { type Breach, evaluateExercise, exerciseBlocks, type ExerciseParagraph, type ExerciseReport } from "../exercises/evaluate";
 import { type AnalysisOptions, CHECK_KINDS, type CheckKind, kindSlug, type Highlight, type LookupHint, type Pairing, type ParagraphResult, type ParagraphStats } from "../analysis/types";
 import { displayFor, pickEdits, shiftHint } from "../lookup/edit";
 import { chips } from "../lookup/popover";
@@ -40,6 +42,8 @@ export interface HighlighterHost {
 	isActive(view: EditorView): boolean;
 	/** Online words to try for a hover card. Absent, or null, when lookups are off. */
 	suggest?(hint: LookupHint): Promise<HintResult> | null;
+	/** The exercise this editor's note is for (frontmatter `proseprince-exercise:`), or null for ordinary notes. */
+	exerciseOf?(view: EditorView): ExerciseContext | null;
 	/** The cursor moved or the text changed in this editor (for the sidebar's current beat). */
 	reportCursor?(view: EditorView, pos: number): void;
 	/** The editor's text was replaced rather than typed: another note loaded into the same tab, or Sync. */
@@ -52,6 +56,12 @@ export interface HighlighterHost {
 	speakerColour?(name: string): string | undefined;
 	/** Whether a modifier + noun pairing is a usual one, for a hover card. Absent, or null, when lookups are off. */
 	pairings?(pairing: Pairing): Promise<PairingResult> | null;
+}
+
+export interface ExerciseContext {
+	exercise: Exercise;
+	subject?: string;
+	written?: string;
 }
 
 /** Only look words up once a card has stayed open this long, so passing the mouse over costs nothing. */
@@ -135,6 +145,8 @@ export interface BeatRow {
 export interface OutlineReport {
 	/** Paragraphs not analysed yet: issues, dialogue and rhythm are partial until this is 0. */
 	pending: number;
+	/** In an exercise note: how the writing does against the exercise's rules. */
+	exercise: ExerciseReport | null;
 	title: string | null;
 	beats: BeatRow[];
 	words: number;
@@ -292,6 +304,8 @@ export class HighlightRunner {
 	private destroyed = false;
 	private suppressCursorWord = false;
 	private findings: Finding[] = [];
+	/** In an exercise note: the places that break its rules. */
+	private breaches: (Breach & { rule: string })[] = [];
 	private speech: SpeechFinding[] = [];
 	/** The note's speakers and their colours, in order of first appearance. */
 	speakers: { name: string; colour: string }[] = [];
@@ -340,6 +354,11 @@ export class HighlightRunner {
 	/** Speech under the Dialogue lens covering a document position. */
 	speechAt(pos: number): SpeechFinding[] {
 		return this.speech.filter((s) => s.from <= pos && s.to >= pos);
+	}
+
+	/** Exercise breaches covering a document position, for the hover card. */
+	exerciseAt(pos: number): (Breach & { rule: string })[] {
+		return this.breaches.filter((b) => b.from <= pos && b.to >= pos);
 	}
 
 	/** Craft-check highlights covering a document position, for the hover card. */
@@ -396,6 +415,9 @@ export class HighlightRunner {
 		const settings = host.settings;
 		const active = effective(settings);
 		const requestId = ++this.requestId;
+		const exercise = settings.enabled ? (host.exerciseOf?.(view) ?? null) : null;
+		if (exercise) return this.runExercise(exercise, requestId);
+		this.breaches = [];
 		view.dom.classList.toggle("pp-ooze", settings.enabled && active.oozeMode);
 		if (!settings.enabled || !anythingEnabled(active, settings) || !host.isActive(view)) {
 			view.dom.classList.remove("pp-ooze");
@@ -569,10 +591,76 @@ export class HighlightRunner {
 		return this.voiceCache.voices.find((v) => v.speaker === speaker);
 	}
 
+	/**
+	 * An exercise note, strictly: none of the usual lenses, only what breaks the exercise's rules.
+	 * Exercise notes are short, so the whole note is analysed each time.
+	 */
+	private async runExercise(ctx: ExerciseContext, requestId: number): Promise<void> {
+		const { view, host } = this;
+		view.dom.classList.remove("pp-ooze");
+		const doc = view.state.doc;
+		const { prose, model } = this.exerciseParagraphs(doc);
+		try {
+			if (!(await this.ensure([...prose, ...model], requestId))) return;
+		} catch (error) {
+			host.reportError(error instanceof Error ? error : new Error(String(error)));
+			return;
+		}
+		if (view.state.doc !== doc) return this.schedule(0);
+		const report = this.evaluate(ctx, doc, prose, model);
+		const ranges: DecorationRange<Decoration>[] = [];
+		const signature: string[] = [];
+		this.breaches = [];
+		for (const part of report.parts) {
+			for (const rule of part.rules) {
+				for (const b of rule.breaches) {
+					if (b.to <= b.from) continue;
+					ranges.push(mark("pp-exercise-breach").range(b.from, b.to));
+					signature.push(`${b.from}:${b.to}:x`);
+					this.breaches.push({ ...b, rule: rule.label });
+				}
+			}
+		}
+		this.findings = [];
+		this.speech = [];
+		this.apply(Decoration.set(ranges, true), signature.sort().join("|"));
+		host.reportReadability(view, { paragraph: null, note: null });
+	}
+
+	/**
+	 * The note's writing and its model passage as paragraphs, with everything else blanked (same
+	 * offsets): frontmatter, headings, the brief and other callouts, comments.
+	 */
+	private exerciseParagraphs(doc: Text): { prose: Prepared[]; model: Prepared[] } {
+		const { prose, model } = exerciseBlocks(doc.toString(), excludedFor(doc));
+		const known = new Set([...docNames(doc), ...this.host.castNames()]);
+		const withNames = (ps: { from: number; text: string }[]): Prepared[] => ps.map((p) => ({ ...p, names: namesIn(p.text, known) }));
+		return { prose: withNames(prose), model: withNames(model) };
+	}
+
+	private evaluate(ctx: ExerciseContext, doc: Text, prose: Prepared[], model: Prepared[]): ExerciseReport {
+		const toInput = (ps: Prepared[]): ExerciseParagraph[] => ps.map((p) => ({ from: p.from, text: p.text, result: this.host.cache.get(this.keyOf(p)) ?? null }));
+		const now = new Date();
+		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+		return evaluateExercise({ exercise: ctx.exercise, doc: doc.toString(), paragraphs: toInput(prose), model: toInput(model), subject: ctx.subject, written: ctx.written, today });
+	}
+
+	/** The exercise report from what's analysed so far, for the sidebar. Null for ordinary notes. */
+	exerciseNow(): ExerciseReport | null {
+		const ctx = this.host.exerciseOf?.(this.view);
+		if (!ctx) return null;
+		const { prose, model } = this.exerciseParagraphs(this.view.state.doc);
+		return this.evaluate(ctx, this.view.state.doc, prose, model);
+	}
+
 	/** The sidebar's numbers once every paragraph is analysed (analysing any that aren't yet). */
 	async outlineReport(allChecks: boolean): Promise<OutlineReport | null> {
-		const all = this.prepare(this.view.state.doc, allParagraphs(this.view.state.doc));
-		if (!(await this.ensure(all, this.requestId))) return null;
+		const doc = this.view.state.doc;
+		const all = this.prepare(doc, allParagraphs(doc));
+		// An exercise note's writing is analysed without its headings and brief.
+		const exercise = this.host.exerciseOf?.(this.view) ? this.exerciseParagraphs(doc) : null;
+		const extra = exercise ? [...exercise.prose, ...exercise.model] : [];
+		if (!(await this.ensure([...all, ...extra], this.requestId))) return null;
 		return this.outlineNow(allChecks);
 	}
 
@@ -585,7 +673,8 @@ export class HighlightRunner {
 		const { host } = this;
 		const doc = this.view.state.doc;
 		const all = this.prepare(doc, allParagraphs(doc));
-		const pending = all.filter((p) => !host.cache.has(this.keyOf(p))).length;
+		const exerciseParts = host.exerciseOf?.(this.view) ? this.exerciseParagraphs(doc) : null;
+		const pending = [...all, ...(exerciseParts ? [...exerciseParts.prose, ...exerciseParts.model] : [])].filter((p) => !host.cache.has(this.keyOf(p))).length;
 		const text = doc.toString();
 		const { title, beats } = beatsOf(headingsIn(text, excludedFor(doc)));
 		const notes = beatNotes(text, beats);
@@ -692,6 +781,7 @@ export class HighlightRunner {
 		});
 		return {
 			pending,
+			exercise: this.exerciseNow(),
 			title: title?.text ?? null,
 			beats: opening.words && rows.length ? [opening, ...rows] : rows,
 			words,
@@ -1034,6 +1124,24 @@ export function createHighlighter(host: HighlighterHost): { extension: Extension
 	const plugin = ViewPlugin.define((view) => new HighlightRunner(view, host));
 	const tooltip = hoverTooltip((view, pos) => {
 		const runner = view.plugin(plugin);
+		const breaches = runner?.exerciseAt(pos) ?? [];
+		if (breaches.length) {
+			return {
+				pos: Math.min(...breaches.map((b) => b.from)),
+				end: Math.max(...breaches.map((b) => b.to)),
+				above: true,
+				create: () => {
+					const dom = document.createElement("div");
+					dom.className = "pp-tooltip";
+					for (const b of breaches) {
+						const item = el(dom, "div", "pp-tooltip-item");
+						el(item, "div", "pp-tooltip-title", b.rule);
+						el(item, "div", "pp-tooltip-note", b.note);
+					}
+					return { dom };
+				},
+			};
+		}
 		const findings = runner?.findingsAt(pos) ?? [];
 		const speech = runner?.speechAt(pos) ?? [];
 		if (findings.length === 0 && speech.length === 0) return null;

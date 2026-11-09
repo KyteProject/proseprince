@@ -125,6 +125,16 @@ export const GUIDES: Record<GuideKey, Guide> = {
 		examples: [["\"Go\" she said.", "\"Go,\" she said."], ["\"Go,\" she shrugged.", "\"Go.\" She shrugged."]],
 		keep: "In a deliberate house style; otherwise these are mechanical fixes.",
 	},
+	namedEmotion: {
+		principle: "Naming a feeling tells the reader what to feel; showing it lets them feel it. If the dialogue and action already make the feeling clear, the name is an explanation and can go. If they don't, the fix is a better action, not the name.",
+		examples: [["She was furious. \"Get out,\" she said.", "\"Get out.\" She held the door open and didn't look at him."], ["Relief washed over him.", "He sat down on the stairs and laughed."]],
+		keep: "In a quick summary between scenes, or when the character names their own feeling in their own words.",
+	},
+	actionClause: {
+		principle: "An -ing or \"as\" clause tucks one action inside another, so it loses its weight, and often the two couldn't happen at once (\"Opening the door, she crossed the room\"). Give each action its own verb, in the order it happens.",
+		examples: [["Pulling off her gloves, she turned to him.", "She pulled off her gloves and turned to him."], ["As he closed the door, he saw the note.", "He closed the door. The note lay on the mat."]],
+		keep: "Now and then, when the actions really are simultaneous; one or two a page reads naturally.",
+	},
 	"dialoguePunct.outside": {
 		principle: "In fiction, the comma or full stop that ends a line of dialogue sits inside the closing quote, in British and American publishing alike. Only a question or exclamation mark that belongs to the narration goes outside.",
 		examples: [["\"Wait\", Mara said.", "\"Wait,\" Mara said."], ["\"It's late\".", "\"It's late.\""]],

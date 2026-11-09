@@ -13,14 +13,14 @@ export const POS_CATEGORIES: readonly PosCategory[] = ["ADJ", "ADV", "NOUN", "PR
 /** Craft checks layered on top of part-of-speech tagging. */
 export type CheckKind =
 	| "cliche" | "redundancy" | "filler" | "qualifier" | "weasel" | "hedge"
-	| "filterWord" | "passive" | "weakVerb" | "nominalization" | "opener"
+	| "filterWord" | "passive" | "namedEmotion" | "weakVerb" | "nominalization" | "opener" | "actionClause"
 	| "adverb" | "tagAdverb" | "stackedModifier" | "participle"
 	| "echo" | "metaphor"
 	| "dialoguePunct" | "nonSpeechTag" | "showyTag" | "invertedTag" | "twoSpeakers" | "untaggedRun" | "quotedThought";
 
 export const CHECK_KINDS: readonly CheckKind[] = [
 	"cliche", "redundancy", "filler", "qualifier", "weasel", "hedge",
-	"filterWord", "passive", "weakVerb", "nominalization", "opener",
+	"filterWord", "passive", "namedEmotion", "weakVerb", "nominalization", "opener", "actionClause",
 	"adverb", "tagAdverb", "stackedModifier", "participle",
 	"echo", "metaphor",
 	"dialoguePunct", "nonSpeechTag", "showyTag", "invertedTag", "twoSpeakers", "untaggedRun", "quotedThought",
