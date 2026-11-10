@@ -517,3 +517,23 @@ body.theme-dark .pp-exercise-breach { background-color: rgba(255, 179, 92, 0.2);
 .pp-story-read { font-weight: 400; font-size: var(--font-ui-smaller); }
 .pp-story-read-book { width: 100%; margin: 8px 0 2px; }
 .pp-story-open.is-second { margin-top: 6px; }
+/* Relations: reveals, cast, and what a scene touches. */
+.pp-story-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.pp-story-controls select { flex: 1 1 8em; min-width: 0; max-width: 100%; font-size: var(--font-ui-smaller); }
+.pp-story-group > summary { font-weight: 500; }
+.pp-story-group > summary .pp-story-read { margin-left: 0; }
+.pp-reveal { cursor: pointer; margin-top: 3px; }
+.pp-reveal-text { line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.pp-reveal-foot { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.pp-reveal.is-unfiled .pp-reveal-text { font-style: italic; color: var(--text-muted); }
+.pp-reveal.is-unfiled .pp-story-ref { color: var(--color-blue, #4c8dff); }
+.pp-story-status { flex: none; font-size: 0.75em; line-height: 1.4; padding: 0 5px; border-radius: 8px; font-weight: 400; color: var(--text-muted); border: 1px solid var(--background-modifier-border); }
+.pp-story-status.is-decided { color: var(--color-green, #44cf6e); border-color: currentColor; }
+.pp-story-status.is-open { color: var(--color-yellow, #e0ac00); border-color: currentColor; }
+.pp-cast { margin-top: 2px; }
+.pp-cast.is-absent .pp-story-name { color: var(--text-muted); }
+.pp-cast-issue { margin-left: 10px; font-size: var(--font-ui-smaller); line-height: 1.35; color: var(--color-orange, #e58e26); border-radius: var(--radius-s); padding: 0 4px; }
+.pp-cast-issue.is-link:hover { background: var(--background-modifier-hover); }
+.pp-touch .pp-outline-row-count { font-size: var(--font-ui-smaller); text-align: right; }
+.pp-touch.is-faint .pp-outline-row-name { color: var(--text-muted); }
+

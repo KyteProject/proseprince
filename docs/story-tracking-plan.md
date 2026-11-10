@@ -1,6 +1,6 @@
 # Plan: story tracking
 
-Status: phase 1 built in 0.19.0 and the read-through from phase 4 in 0.20.0 (both 10 November 2026). Phases 2 and 3 and the compile are not started; their version numbers below each move up by one. First written 10 November 2026; revised the same day with Dan's answers. Background in [feature-map-snowflake-penseed.md](feature-map-snowflake-penseed.md) and [soul-rot-vault-fit.md](soul-rot-vault-fit.md).
+Status: phase 1 built in 0.19.0, the read-through from phase 4 in 0.20.0 and phase 2 in 0.21.0 (all 10 November 2026). Phase 3 and the compile are not started. First written 10 November 2026; revised the same day with the author's answers. Background in [feature-map-snowflake-penseed.md](feature-map-snowflake-penseed.md), and in a private note on the author's own vault that is kept out of this repository.
 
 ## Goal
 
@@ -64,7 +64,7 @@ Two views, one index.
 | Annotation | a line in a scene | `> [!note]`, `> [!question]`, `> [!todo]` (and `check:` inside one), `%% filed → [[x]] %%`, `%% checked → [[x]] %%`, `- [ ]` on a prose line, `==text==`, `@@`, `#openloop`, and bracket placeholders left in prose (`[FIX: …]`, `[world name …]`) |
 | Canon note | any note outside the prose folders, `_proseprince`, `_archive` and `_templates` | `type`, `status`, `aliases`, `## Added YYYY-MM-DD` headings and the bullets under them ending `([[scene]])` |
 | Fact | scene side and note side together | the scene comes from the `%% filed %%` comment, which survives a split; the text comes from the citation in the note. Where they disagree, the row says so |
-| Mention | a canon note's `aliases`, a character's names, World note entries | matched in scene prose with the name matcher already used for speakers; whole words, case as written for names, any case for aliases marked as terms |
+| Mention | a canon note's `aliases`, and a character note's title | matched in scene prose as whole words: as written for a name with a capital, any case for one all in lower case |
 | Unnumbered notes in the prose folders | — | ignored by the Story view |
 
 Vault-side changes this relies on, all small and all Dan's or the organiser's to make:
@@ -95,7 +95,7 @@ Each phase is a build and a minor version; fixes are patches.
 
 **Tests**: name parsing for chapter notes and scenes, beat-to-scene attachment by link, by title and unplanned, annotation parsing, promise status over a small invented book.
 
-### Phase 2 (0.20): reveals, cast, touches
+### Phase 2 (built, 0.21.0): reveals, cast, touches
 
 **Reveals section.** By scene in reading order (what the reader learned there, and the note each fact landed in), by note, and by `day` once any scene has one. An "as of" control picks a scene and shows everything the reader has been shown up to it. For the open scene: facts recorded from later scenes, which a draft of this scene must not assume. Unfiled `[!note]` callouts count, marked unfiled.
 
@@ -107,7 +107,14 @@ Each phase is a build and a minor version; fixes are patches.
 
 **Tests**: both-sides fact resolution including a split chapter, reader-knows-as-of, mismatch lists, mention matching with ambiguous aliases.
 
-### Phase 3 (0.21): needs a look, inventory
+**As built**, where it differs from the above:
+- A fact is any line ending `([[scene]])`, under any heading, since the vault keeps cited lines in a note's decided body as well as under `## Added`.
+- A filed comment names a note, not a line, so the two sides can't be matched fact by fact. The check is per note: a scene with a filed comment for a note that never cites that scene is flagged, with the scene of the same chapter the note cites instead.
+- Mention matching has one rule and no marking: a name with a capital matches as written, one all in lower case matches any case, a leading article is ignored. World note entries are used to group aliases of one person, not as mentions.
+- Cast mismatches come from the plan, the properties and the prose only: in a beat's `who:` but not the scene's `characters`, the reverse, and listed but never named (names only, not descriptions; and for someone with both, "the inspector" in the prose is enough, in any case). **Who speaks is not in the Cast yet**: attribution runs in the editor under the Dialogue lens, one note at a time, and the outline's Beats section already checks `who:` against speakers there. Carrying it into the Cast means running attribution over every scene, which is its own piece of work.
+- The note side of Touches is in the outline: open a note about the story and it lists its scenes. The Story view shows a scene's declared and recorded notes on hover, and lists notes the prose names in two scenes or more with nothing recorded under Reveals, by note.
+
+### Phase 3 (0.22): needs a look, inventory
 
 **Needs a look** in the Story view, and the same reasons on the Scene section. One line per reason, with the two dates behind it:
 - canon changed since the continuity pass, in a note the scene touches;
@@ -118,7 +125,7 @@ Each phase is a build and a minor version; fixes are patches.
 
 A scene with no pass flags reads "no pass yet", never stale. When a pass flag's date changes, the scene's word count and a content hash are recorded in plugin data, so "edited since" can use a threshold (at least 50 characters and 1% of the note) and say how much changed. Until a flag change has been seen, the file date is the fallback.
 
-**Write story inventory** command: writes `_proseprince/Inventory.md`, stamped with the date and time. Contents, short: open and progressing promises with their scenes; needs-a-look reasons; per chapter, counts of annotations to clear; and for the scene that was open, its reading list (the notes it touches) and its who-knows lines. Every vault script already skips `_proseprince`. The skills read it instead of scanning; a stale stamp means ask for a refresh. The matching change to the writing team's protocol is in section 9.5 of the vault-fit document.
+**Write story inventory** command: writes `_proseprince/Inventory.md`, stamped with the date and time. Contents, short: open and progressing promises with their scenes; needs-a-look reasons; per chapter, counts of annotations to clear; and for the scene that was open, its reading list (the notes it touches) and its who-knows lines. Every vault script already skips `_proseprince`. The skills read it instead of scanning; a stale stamp means ask for a refresh. The matching change to the writing team's protocol is described in the private vault note.
 
 **Tests**: each reason from invented dates; the threshold; inventory output for the invented book.
 

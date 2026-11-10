@@ -1,5 +1,6 @@
 import { excludedBlocks, type Range } from "./mask";
-import { beatNotes, beatsOf, countLine, headingsIn } from "./outline";
+import { maskInline } from "./mask";
+import { beatNotes, beatsOf, countLine, headingsIn, isProseLine } from "./outline";
 
 /**
  * The book, derived from the notes: chapters and scenes from file names, a chapter's beats from its
@@ -34,6 +35,8 @@ export interface Annotation {
 	/** Document offset to jump to. */
 	from: number;
 	text: string;
+	/** The notes a `filed` or `checked` comment names. */
+	links?: string[];
 }
 
 const CALLOUT = /^\s*(?:>\s*)+\[!(\w+)\][-+]?\s*(.*)$/;
@@ -68,7 +71,10 @@ export function annotationsIn(doc: string, excluded: readonly Range[] = excluded
 			if (callout && kind) out.push({ kind: kind === "todo" && /^check\s*:/i.test(callout[2]!) ? "check" : kind, from, text: callout[2]!.replace(/#openloop\b/gi, "").trim() });
 			continue;
 		}
-		for (const m of line.matchAll(HANDLED)) out.push({ kind: m[1]!.toLowerCase() as "filed" | "checked", from: from + m.index, text: m[2]!.replace(/\[\[|\]\]/g, "") });
+		for (const m of line.matchAll(HANDLED)) {
+			const links = [...m[2]!.matchAll(/\[\[([^\]\n]+)\]\]/g)].map((l) => linkTarget(l[1]!)).filter(Boolean);
+			out.push({ kind: m[1]!.toLowerCase() as "filed" | "checked", from: from + m.index, text: m[2]!.replace(/\[\[|\]\]/g, ""), links: links.length ? links : [m[2]!.trim()].filter(Boolean) });
+		}
 		// Comments keep their length, so offsets stay true.
 		const clean = line.replace(/%%.*?%%/g, (c) => " ".repeat(c.length));
 		const task = TASK.exec(clean);
@@ -147,7 +153,9 @@ function cardIn(section: string, label: string): [string, string][] {
 }
 
 /** The note a `[[link]]` points at: no folder, heading, alias or extension. */
-const linkTarget = (inner: string) => inner.split("|")[0]!.split("#")[0]!.split("/").pop()!.replace(/\.md$/i, "").trim();
+export function linkTarget(inner: string): string {
+	return inner.split("|")[0]!.split("#")[0]!.split("/").pop()!.replace(/\.md$/i, "").trim();
+}
 
 export interface ChapterBeat {
 	text: string;
@@ -198,8 +206,31 @@ export interface SceneRecord {
 	pays: string[];
 	flags: { dev?: string; line?: string; continuity?: string };
 	annotations: Record<AnnotationKind, number>;
+	/** The notes this scene's `%% filed → [[note]] %%` comments name, one entry per comment. */
+	filed: string[];
+	/** The first line of each `> [!note]` still waiting to be filed. */
+	unfiled: string[];
 	/** A chapter note's plan. */
 	outline?: ReturnType<typeof chapterOutline>;
+}
+
+/** The lines of a note outside frontmatter, code, comments and callouts. */
+function proseLines(text: string, excluded: readonly Range[]): string[] {
+	const out: string[] = [];
+	let offset = 0;
+	let block = 0;
+	for (const line of text.split("\n")) {
+		const from = offset;
+		offset += line.length + 1;
+		while (block < excluded.length && excluded[block]!.to <= from) block++;
+		if (!(block < excluded.length && excluded[block]!.from <= from)) out.push(line);
+	}
+	return out;
+}
+
+/** A note's prose as the reader gets it, for finding names in: no headings, comments, callouts or Markdown. */
+export function proseOf(text: string, excluded: readonly Range[] = excludedBlocks(text)): string {
+	return proseLines(text, excluded).filter(isProseLine).map((line) => maskInline(line).replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
 }
 
 /** What the book needs from one note, or null when its name isn't `chapter.scene`. */
@@ -208,15 +239,9 @@ export function sceneRecord(path: string, basename: string, text: string, frontm
 	if (!name) return null;
 	const excluded = excludedBlocks(text);
 	let words = 0;
-	let offset = 0;
-	let block = 0;
-	for (const line of text.split("\n")) {
-		const from = offset;
-		offset += line.length + 1;
-		while (block < excluded.length && excluded[block]!.to <= from) block++;
-		if (!(block < excluded.length && excluded[block]!.from <= from)) words += countLine(line).words;
-	}
+	for (const line of proseLines(text, excluded)) words += countLine(line).words;
 	const kind = name.scene === 0 ? "chapter" : "scene";
+	const annotations = annotationsIn(text, excluded);
 	return {
 		path, basename, name, kind, words,
 		target: asCount(frontmatter.target),
@@ -229,7 +254,9 @@ export function sceneRecord(path: string, basename: string, text: string, frontm
 		progresses: asNames(frontmatter.progresses),
 		pays: asNames(frontmatter.pays),
 		flags: { dev: asDate(frontmatter.dev), line: asDate(frontmatter.line), continuity: asDate(frontmatter.continuity) },
-		annotations: countAnnotations(annotationsIn(text, excluded)),
+		annotations: countAnnotations(annotations),
+		filed: annotations.filter((a) => a.kind === "filed").flatMap((a) => a.links ?? []),
+		unfiled: annotations.filter((a) => a.kind === "note").map((a) => a.text).filter(Boolean),
 		...(kind === "chapter" ? { outline: chapterOutline(text) } : {}),
 	};
 }

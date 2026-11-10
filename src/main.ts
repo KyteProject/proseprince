@@ -13,12 +13,13 @@ import { type HintResult, type PairingResult, suggestForHint, usualPairings } fr
 import type { LookupHint, Pairing } from "./analysis/types";
 import { excludedBlocks } from "./analysis/mask";
 import { beatAt, beatNotes, beatsOf, headingsIn } from "./analysis/outline";
+import { sceneKnowledge, type Reveal } from "./analysis/relations";
 import { fillSceneTemplate, nextSceneNumber, parseSceneName, readThrough, SCENE_TEMPLATE, sceneFileName, sceneLabel, scenePromises, type SceneRecord } from "./analysis/story";
 import { ProsePrinceSettingTab } from "./settings";
 import type { OutlineReport } from "./editor/highlighter";
-import { OUTLINE_VIEW, type OutlineStory, OutlineView } from "./sidebar";
+import { OUTLINE_VIEW, type OutlineFact, type OutlineStory, OutlineView } from "./sidebar";
 import { StoryIndex } from "./story";
-import { STORY_VIEW, StoryView } from "./storyView";
+import { STORY_VIEW, StoryView, touchDetail, touchLabel } from "./storyView";
 import { VoicesModal } from "./voicesModal";
 import {
 	activeLenses,
@@ -54,7 +55,12 @@ export default class ProsePrincePlugin extends Plugin {
 	private readabilityShown = "";
 	world = new WorldIndex(this.app, () => this.settings);
 	private rebuildWorld = debounce(async () => {
-		if (await this.world.rebuild()) this.refreshEditors();
+		if (!(await this.world.rebuild())) return;
+		this.refreshEditors();
+		// The cast is grouped by the World note's names, so it follows them.
+		if (!(await this.story.rebuild(true))) return;
+		this.renderStory();
+		this.refreshOutline();
 	}, 800, true);
 	/** Online word lookups. Nothing is requested unless `settings.lookup.enabled` is on. */
 	lookups = new LookupService({
@@ -69,7 +75,7 @@ export default class ProsePrincePlugin extends Plugin {
 	});
 	lookupHistory = new LookupHistory(() => this.saveLookupHistory());
 	/** The book: chapter notes and scenes in the prose folders, re-read when one of them changes. */
-	story = new StoryIndex(this.app, () => this.settings.folders);
+	story = new StoryIndex(this.app, () => this.settings.folders, (name) => this.canonicalSpeaker(name));
 	private rebuildStory = debounce(async () => {
 		if (!(await this.story.rebuild())) return;
 		this.renderStory();
@@ -125,13 +131,13 @@ export default class ProsePrincePlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => void this.rebuildStory());
 		this.registerEvent(this.app.metadataCache.on("resolved", () => void this.rebuildStory()));
 		this.registerEvent(this.app.metadataCache.on("changed", (file) => {
-			if (this.story.isRelevant(file) || this.story.knows(file.path)) void this.rebuildStory();
+			if (this.story.isRelevant(file) || this.story.knows(file.path) || this.story.isCanon(file)) void this.rebuildStory();
 		}));
 		this.registerEvent(this.app.vault.on("delete", (file) => {
 			if (this.story.knows(file.path)) void this.rebuildStory();
 		}));
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-			if (file instanceof TFile && (this.story.knows(oldPath) || this.story.isRelevant(file))) void this.rebuildStory();
+			if (file instanceof TFile && (this.story.knows(oldPath) || this.story.isRelevant(file) || this.story.isCanon(file))) void this.rebuildStory();
 		}));
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
 			const path = this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path;
@@ -622,25 +628,36 @@ export default class ProsePrincePlugin extends Plugin {
 
 	private renderStory(): void {
 		const current = (this.outlineSource?.file ?? this.app.workspace.getActiveFile())?.path ?? null;
-		for (const v of this.storyViews()) v.show({ book: this.story.book, current, onOpen: (path, newTab) => void this.openPath(path, newTab), onRead: (chapter) => void this.openReadThrough(chapter) });
+		for (const v of this.storyViews()) v.show({ book: this.story.book, relations: this.story.relations, current, onOpen: (path, newTab, line) => void this.openPath(path, newTab, line), onRead: (chapter) => void this.openReadThrough(chapter) });
 	}
 
-	/** Open a note from a sidebar: in the editor last used, or a new tab with Ctrl/Cmd-click. */
-	private async openPath(path: string, newTab: boolean): Promise<void> {
+	/** Open a note from a sidebar: in the editor last used, or a new tab with Ctrl/Cmd-click. At a line (from 0), when given. */
+	private async openPath(path: string, newTab: boolean, line?: number): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) {
 			new Notice(`ProsePrince: couldn't find ${path}. It may have been renamed.`);
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf(newTab ? "tab" : false);
-		await leaf.openFile(file);
+		// Obsidian's own way to land on a line: it scrolls once the note has loaded, in either view mode.
+		await leaf.openFile(file, line === undefined ? undefined : { eState: { line } });
 		this.app.workspace.setActiveLeaf(leaf, { focus: true });
 	}
 
 	/** Where a note sits in the book, for the outline: a scene's beat and promises, or a chapter note's scenes. */
 	private storyFor(file: TFile): OutlineStory | null {
 		const record = this.story.record(file.path);
-		if (!record) return null;
+		const relations = this.story.relations;
+		if (!record) {
+			// A note about the story: the scenes that touch it.
+			const scenes = this.story.note(file.path) ? (relations.touchedBy.get(file.path) ?? []) : [];
+			if (!scenes.length) return null;
+			return {
+				kind: "note",
+				promises: [],
+				touches: scenes.map(({ scene, touch }) => ({ path: scene.path, label: sceneLabel(scene), how: touchLabel(touch), detail: touchDetail(touch), faint: !touch.declared.length && !touch.facts && !touch.filed })),
+			};
+		}
 		const book = this.story.book;
 		const promises = scenePromises(book, record);
 		const link = (s: SceneRecord) => ({ path: s.path, label: sceneLabel(s), words: s.words });
@@ -655,9 +672,17 @@ export default class ProsePrincePlugin extends Plugin {
 		}
 		const place = book.places.get(record.path);
 		const note = place?.chapter.note;
+		const knowledge = sceneKnowledge(relations, book, record.path, (name) => this.canonicalSpeaker(name));
+		const fact = (r: Reveal): OutlineFact => ({ text: r.text, where: `${sceneLabel(r.scene)}${r.note ? ` · ${r.note.title}` : " · unfiled"}`, path: r.note?.path ?? r.scene.path, ...(r.note && r.line !== undefined ? { line: r.line } : {}) });
 		return {
 			kind: "scene",
 			promises,
+			touches: (relations.touches.get(record.path) ?? []).map((t) => ({
+				path: t.note.path, label: t.note.title, group: t.note.type, status: t.note.status,
+				how: touchLabel(t), detail: `${t.note.basename}\n${touchDetail(t)}`,
+				faint: !t.declared.length && !t.facts && !t.filed,
+			})),
+			...(knowledge ? { knowledge: { here: knowledge.here.length, before: knowledge.before, later: knowledge.later.map(fact), ahead: knowledge.ahead.map(fact), ...(knowledge.pov ? { pov: knowledge.pov } : {}) } } : {}),
 			...(note ? { chapter: { path: note.path, title: place.chapter.title } } : {}),
 			// Unset when the chapter has no outline; null when it has one and this scene isn't in it.
 			...(place?.beat ? { beat: { text: place.beat.text, card: place.beat.card, target: place.beat.target } } : place?.chapter.beats.length ? { beat: null } : {}),
@@ -718,7 +743,7 @@ export default class ProsePrincePlugin extends Plugin {
 				onFocusEditor: () => this.app.workspace.setActiveLeaf(md.leaf, { focus: true }),
 				story: this.storyFor(file),
 				storyLink: this.settings.storyLink,
-				onOpenPath: (path, newTab) => void this.openPath(path, newTab),
+				onOpenPath: (path, newTab, line) => void this.openPath(path, newTab, line),
 				onOpenStory: () => void this.openStory(),
 				onReadChapter: () => {
 					const chapter = this.story.record(file.path)?.name.chapter;

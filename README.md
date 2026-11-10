@@ -114,6 +114,20 @@ With the cursor in a beat, **Create scene from beat** makes the next numbered sc
 
 **Promises.** Name a promise under `promises:` in the scene that makes it, under `progresses:` where it moves on, and under `pays:` where it pays off. The view lists every name with where each happened and a status worked out from reading order: *open*, *progressing* or *paid*. Two warnings catch slips: *paid before it was made*, and *never made* (paid or progressed with no scene making it, usually a name spelt two ways). A promise repeated by several scenes of one chapter is shown once, for the chapter.
 
+**Reveals: what the reader has been shown.** A fact is a line in a note about the story that ends with the scene it came from:
+
+```
+- The ferry runs only at slack water. ([[02.01 - Ferry]])
+```
+
+Any note outside the prose folders can hold them (folders starting with `_` or `.` are skipped), under any heading; a fact under `## Added 2026-11-09` carries that date. The view lists them by scene in reading order, by note, or by in-world `day` once scenes have one. **As of** rewinds to a scene: everything shown up to it, and how much is still to come. A `> [!note]` still sitting in a scene is listed as unfiled. Hover a fact for who was in its scene (its `pov` and `characters`): they were there, which is not the same as noticing. Click to open the note at that line. Where a scene's `%% filed → [[note]] %%` comment names a note that never cites the scene, the view says so; after a scene is split, citations keep the old scene's name.
+
+**Cast.** A row for everyone a scene lists, a beat's `who:` plans, or a character note names: the scenes they are *in* (`pov` or `characters`), the scenes that only *name* them in the prose, and first and last. Under a row, where the plan, the properties and the prose disagree: in a beat's `who:` but not in its scene's `characters`, the reverse, or listed in a scene whose prose never names them. Only a name is held to that last check: "The Inspector" and "Two guards" describe someone. Someone with both a name and a description is covered by either, so a scene that only ever says "the inspector" is not flagged. A name with no character note behind it says so; adding it to a note's `aliases` joins the two rows.
+
+**How a note is found in the prose.** By its `aliases`, and for a `type: character` note also by its title ("10.2 Oskar (The Clerk)" is *Oskar* and *The Clerk*; a title that is a sentence is not a name). A name with a capital matches as written, so *Wren* is not "wren"; one written all in lower case matches any case, so the alias `salt pan` finds "Salt pan". A leading "The" is ignored. A name two notes both claim counts for neither, and the view lists it.
+
+**In a scene**, the outline gains two sections. *Touches*: the notes the scene is connected to, by type, each with how (listed in its properties or its beat, holding a fact from it, or named in its prose) and the note's `status`, so a scene leaning on a note still open shows. *Reader*: how many facts the reader has by this scene; folded below, the facts recorded from later scenes, which this scene can't lean on, and the facts shown in scenes its point-of-view character wasn't in. **In a note about the story**, the outline lists the scenes that touch it.
+
 **Reading a chapter, or the book.** *Read through this chapter* (also "read" beside a chapter in the story view, and a button at the foot of the outline) and *Read through the book* open the scenes as one continuous page in reading view. The page is a note in `_proseprince` that only embeds each scene, in reading order, so it holds no copy of your prose and always shows the scenes as they are now. Your properties, hidden comments and callouts don't show; a scene's own title becomes a small signpost, and the link icon beside it opens the scene for editing. Scenes with nothing written yet are left out. The note is rewritten when you run the command and its list of scenes has changed, so run it again after adding or renumbering scenes.
 
 ## Exercises
@@ -224,9 +238,9 @@ Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rule
 
 ## Roadmap
 
-Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18), the story view with chapter outlines, annotations and promises (0.19), reading a chapter or the book as one page (0.20).
+Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18), the story view with chapter outlines, annotations and promises (0.19), reading a chapter or the book as one page (0.20), reveals, the cast and what a scene touches (0.21).
 
-- Story tracking, next (see `docs/story-tracking-plan.md`): what the reader has been shown by each scene, a cast table, the notes a scene touches; scenes that need another look, and an inventory file; a clean compile for export.
+- Story tracking, next (see `docs/story-tracking-plan.md`): scenes that need another look, and an inventory file; a clean compile for export; who speaks in each scene, for the cast.
 - Remaining Le Guin chapters: tense consistency (6), point of view and head-hopping (7–8; the frontmatter `pov` and the dialogue pronoun tracking are a start), telling markers (9), crowding map (10), sound (1; the lookup card's rhymes are a start).
 - More exercises (see `docs/exercise-mode-plan.md`): pure A/B dialogue, person and tense, points of view, cut it to half, beats added to bare dialogue.
 - Writer's own word lists (a Words lens), seeded from the sidebar's repeated words and the words you replace most in lookups; then Accents: words a character would or wouldn't say, building on the voices table.

@@ -19,9 +19,38 @@ export interface OutlineSceneLink {
 	words: number;
 }
 
-/** Where the note sits in the book: for a scene, its beat in the chapter's outline; for a chapter note, its scenes. */
+/** A note a scene touches, or a scene that touches a note. */
+export interface OutlineTouch {
+	path: string;
+	label: string;
+	/** The note's `type`, for grouping. */
+	group?: string;
+	status?: string;
+	/** How they're connected, in a few words. */
+	how: string;
+	detail: string;
+	/** Named in the prose only: nothing declared, nothing recorded. */
+	faint: boolean;
+}
+
+/** Something the reader was shown, and where. */
+export interface OutlineFact {
+	text: string;
+	where: string;
+	path: string;
+	line?: number;
+}
+
+/**
+ * Where the note sits in the book: for a scene, its beat in the chapter's outline; for a chapter note,
+ * its scenes; for a note about the story, the scenes that touch it.
+ */
 export interface OutlineStory {
-	kind: "chapter" | "scene";
+	kind: "chapter" | "scene" | "note";
+	/** A scene's notes, or a note's scenes. */
+	touches?: OutlineTouch[];
+	/** What the reader knows at a scene. */
+	knowledge?: { here: number; before: number; later: OutlineFact[]; pov?: string; ahead: OutlineFact[] };
 	/** A scene's chapter note, when the chapter has one. */
 	chapter?: { path: string; title: string };
 	/** A scene's beat from the chapter note: null when the chapter has an outline and this scene isn't in it. */
@@ -51,7 +80,7 @@ export interface OutlineContext {
 	story: OutlineStory | null;
 	/** Whether to offer the link to the story view. */
 	storyLink: boolean;
-	onOpenPath(path: string, newTab: boolean): void;
+	onOpenPath(path: string, newTab: boolean, line?: number): void;
 	onOpenStory(): void;
 	/** Read the note's chapter as one page. */
 	onReadChapter(): void;
@@ -184,18 +213,20 @@ export class OutlineView extends ItemView {
 		this.beats(root, report, ctx);
 		// An exercise note's checkboxes are its own self-check, not fixes left in a draft.
 		if (!report.exercise) this.annotations(root, report, ctx);
+		if (ctx.story) this.touches(root, ctx.story, ctx);
+		if (ctx.story?.knowledge) this.reader(root, ctx.story.knowledge, ctx);
 		this.rhythm(root, report, ctx);
 		// Exercise notes are strict: the exercise's rules replace the usual issues.
 		if (!report.exercise) this.issues(root, report, ctx);
 		this.dialogue(root, report, ctx);
 		this.repeated(root, report, ctx);
-		if (ctx.story) {
+		if (ctx.story && ctx.story.kind !== "note") {
 			const read = root.createEl("button", { cls: "pp-outline-button pp-story-open", text: "Read this chapter…" });
 			read.setAttribute("aria-label", "The chapter's written scenes, in order, as one page");
 			read.onclick = () => ctx.onReadChapter();
 		}
 		if (ctx.storyLink) {
-			const link = root.createEl("button", { cls: `pp-outline-button pp-story-open${ctx.story ? " is-second" : ""}`, text: "Story view: the whole book…" });
+			const link = root.createEl("button", { cls: `pp-outline-button pp-story-open${ctx.story && ctx.story.kind !== "note" ? " is-second" : ""}`, text: "Story view: the whole book…" });
 			link.onclick = () => ctx.onOpenStory();
 		}
 		this.setCursor(ctx.cursor);
@@ -475,6 +506,61 @@ export class OutlineView extends ItemView {
 			body.createDiv({ cls: "pp-outline-group", text: "Already handled" });
 			rows(handled, true);
 		}
+	}
+
+	/** A scene's notes, grouped by type, or a note's scenes: each with how the two are connected. */
+	private touches(root: HTMLElement, story: OutlineStory, ctx: OutlineContext): void {
+		const list = story.touches ?? [];
+		if (!list.length) return;
+		const body = this.section(root, "touches", story.kind === "note" ? `Scenes (${num(list.length)})` : `Touches (${num(list.length)})`);
+		let group: string | undefined;
+		list.forEach((t, i) => {
+			if (story.kind !== "note" && (i === 0 || t.group !== group)) {
+				group = t.group;
+				body.createDiv({ cls: "pp-outline-group", text: group ? `${group.charAt(0).toUpperCase()}${group.slice(1)}` : "Other notes" });
+			}
+			const row = body.createDiv({ cls: `pp-outline-row pp-touch${t.faint ? " is-faint" : ""}` });
+			row.createSpan({ cls: "pp-outline-row-name", text: t.label });
+			if (t.status) row.createSpan({ cls: `pp-story-status is-${t.status.toLowerCase().replace(/[^a-z]/g, "")}`, text: t.status });
+			row.createSpan({ cls: "pp-outline-row-count", text: t.how });
+			row.setAttribute("aria-label", t.detail);
+			row.onclick = (evt) => ctx.onOpenPath(t.path, Keymap.isModEvent(evt) !== false);
+		});
+		body.createDiv({
+			cls: "pp-outline-note",
+			text: story.kind === "note"
+				? "Scenes that list this note's subject, have a fact recorded here, or name it in their prose."
+				: "Notes this scene is connected to: listed in its properties or its beat, holding a fact from it, or named in its prose. A note is found in the prose by its aliases.",
+		});
+	}
+
+	/** What the reader knows at this scene: how much, what is still to come, and what the point of view missed. */
+	private reader(root: HTMLElement, k: NonNullable<OutlineStory["knowledge"]>, ctx: OutlineContext): void {
+		if (!k.here && !k.before && !k.later.length) return;
+		const body = this.section(root, "reader", "Reader");
+		body.createDiv({ cls: "pp-outline-note", text: `Shown before this scene: ${num(k.before)}. Shown here: ${num(k.here)}.` });
+		const list = (id: string, title: string, facts: OutlineFact[], hint: string) => {
+			if (!facts.length) return;
+			const details = body.createEl("details", { cls: "pp-story-chapter pp-story-group" });
+			// These lists are for looking something up, so they start folded.
+			details.open = this.closed.has(`reader-open:${id}`);
+			details.createEl("summary", { text: title }).createSpan({ cls: "pp-beat-words", text: num(facts.length) });
+			details.addEventListener("toggle", () => {
+				if (details.open) this.closed.add(`reader-open:${id}`);
+				else this.closed.delete(`reader-open:${id}`);
+			});
+			const inner = details.createDiv({ cls: "pp-outline-body" });
+			for (const f of facts) {
+				const row = inner.createDiv({ cls: "pp-story-row pp-reveal is-link" });
+				row.createDiv({ cls: "pp-reveal-text", text: f.text });
+				row.createDiv({ cls: "pp-reveal-foot" }).createSpan({ cls: "pp-story-ref", text: f.where });
+				row.setAttribute("aria-label", `${f.text}\n${f.where}`);
+				row.onclick = (evt) => ctx.onOpenPath(f.path, Keymap.isModEvent(evt) !== false, f.line);
+			}
+			inner.createDiv({ cls: "pp-outline-note", text: hint });
+		};
+		list("later", "From later scenes", k.later, "Recorded from scenes after this one. The reader doesn't have these yet, so this scene can't lean on them.");
+		if (k.pov) list("ahead", `${k.pov} wasn't there`, k.ahead, `Shown to the reader in scenes that don't list ${k.pov}. Going by who was in the scene, the reader knows these and ${k.pov} may not.`);
 	}
 
 	private rhythm(root: HTMLElement, r: OutlineReport, ctx: OutlineContext): void {
