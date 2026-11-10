@@ -13,6 +13,8 @@ import {
 	overrideCount,
 	POS_LABELS,
 	type RhythmScope,
+	READ_FOLDER_DEFAULT,
+	SCENE_TEMPLATE_DEFAULT,
 	WORLD_NOTE_DEFAULT,
 	setCheck,
 	setOoze,
@@ -365,6 +367,34 @@ export class ProsePrinceSettingTab extends PluginSettingTab {
 			.setDesc("Where \"Start exercise…\" creates practice notes. In an exercise note the usual lenses switch off and only the exercise's rules are flagged.")
 			.addText((t) => t.setPlaceholder("_proseprince/Exercises").setValue(s.exerciseFolder).onChange(async (v) => {
 				s.exerciseFolder = v.trim();
+				await save();
+			}));
+
+		// ── Story ──────────────────────────────────────────────────────────────
+		new Setting(containerEl).setName("Story").setHeading();
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: "The story view reads the book from your prose folders: a note named \"04.02 - Breakfast Bar\" is scene 2 of chapter 4, and \"04.00 - The Job\" is chapter 4's outline, whose headings are its beats. Link a scene under a beat to attach it. Promises come from promises:, progresses: and pays: in each scene's properties. Nothing is detected and nothing in your notes is changed.",
+		});
+		new Setting(containerEl)
+			.setName("Scene template")
+			.setDesc("The note \"Create scene from beat\" starts a new scene from. {{title}} becomes the beat's heading; an empty pov: and characters: are filled from the chapter and the beat's who: line. A plain built-in template is used when this note doesn't exist.")
+			.addText((t) => t.setPlaceholder(SCENE_TEMPLATE_DEFAULT).setValue(s.sceneTemplate).onChange(async (v) => {
+				s.sceneTemplate = v.trim();
+				await save();
+			}));
+		new Setting(containerEl)
+			.setName("Read-through folder")
+			.setDesc("Where \"Read through this chapter\" and \"Read through the book\" write their note. The note only embeds your scenes, in order, so it holds no copy of your prose and is rewritten each time you run the command.")
+			.addText((t) => t.setPlaceholder(READ_FOLDER_DEFAULT).setValue(s.readFolder).onChange(async (v) => {
+				s.readFolder = v.trim();
+				await save();
+			}));
+		new Setting(containerEl)
+			.setName("Link to the story view in the outline")
+			.setDesc("A button at the foot of the outline sidebar. Switch it off in a vault that isn't a book.")
+			.addToggle((t) => t.setValue(s.storyLink).onChange(async (v) => {
+				s.storyLink = v;
 				await save();
 			}));
 

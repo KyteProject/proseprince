@@ -4,6 +4,10 @@ export type LensId = "style" | "king" | "leguin" | "pos" | "rhythm" | "dialogue"
 
 /** Where the World note lives by default: an underscore folder, sorted with _archive and _templates. */
 export const WORLD_NOTE_DEFAULT = "_proseprince/World.md";
+/** Where the vault keeps its template for a new scene, by default. */
+export const SCENE_TEMPLATE_DEFAULT = "_templates/draft.md";
+/** Where read-through notes go: ProsePrince's own folder, which holds nothing else you write. */
+export const READ_FOLDER_DEFAULT = "_proseprince";
 export type RhythmScope = "paragraph" | "visible";
 
 /** Explicit on/off choices that win over the lenses. Missing keys follow the lenses. */
@@ -38,6 +42,12 @@ export interface ProsePrinceSettings {
 	outlineAllChecks: boolean;
 	/** Where new exercise notes go. */
 	exerciseFolder: string;
+	/** The note a new scene is made from ("Create scene from beat"); a built-in one when it doesn't exist. */
+	sceneTemplate: string;
+	/** Offer the link to the story view at the foot of the outline. */
+	storyLink: boolean;
+	/** Where read-through notes are written. */
+	readFolder: string;
 }
 
 export interface DialogueSettings {
@@ -282,6 +292,9 @@ function defaults(): ProsePrinceSettings {
 		dialogue: { dimNarration: true, highlightsInDialogue: false },
 		outlineAllChecks: false,
 		exerciseFolder: "_proseprince/Exercises",
+		sceneTemplate: SCENE_TEMPLATE_DEFAULT,
+		storyLink: true,
+		readFolder: READ_FOLDER_DEFAULT,
 		lookup: { enabled: false, apiKey: "", hoverCards: true, rightClick: true, hideRare: false, history: true },
 	};
 }
