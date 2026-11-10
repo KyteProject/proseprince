@@ -77,10 +77,44 @@ The ribbon's scroll icon (or *Open outline sidebar*) opens an outline for the no
   Its bar then shows progress towards the target (orange once past it), the count reads "312 / 450", and the `change:` note shows on hover. `who:` (everyone present, speaking or not) shows under the beat as a prompt, each name marked: ● speaks, ○ named but silent, dotted orange when listed but not named in the beat yet; descriptions ("Unnamed partner") aren't checked, and anyone who speaks without being listed shows as "+Name". The beat at the cursor is highlighted.
 
   `who:` helps the Dialogue lens too: names listed there count as names throughout the note, the speaker card offers them as pins first, and in a scene with exactly two people an untagged line that alternates away from one of them is attributed to the other (still a dotted guess).
+- **Annotations**: your own marks in the note, counted by kind, each row walking through its places: notes to file (`> [!note]`), questions (`> [!question]` and `#openloop`), todos and claims to check (`> [!todo]`, `check:`), fix-later boxes (`- [ ]` in the prose), stumbles (`==highlight==` or `@@`) and placeholders left in the prose (`[FIX: …]`, `[world name]`). Below them, what has already been handled: `%% filed → [[note]] %%` and `%% checked → [[note]] %%`.
 - **Sentence rhythm**: one bar per sentence (or per small group in a long chapter), by felt length, cool to warm; click to go there.
 - **Issues**: counts per check, grouped as in settings, following your lenses (switch to *All checks* for an edit pass). Click a check to walk through its occurrences.
 - **Dialogue**: speakers with their colour, lines and share (hover for more; click to walk through their lines), how many lines are certain, guessed or unclear, long untagged runs, and the voices window.
 - **Repeated words**: the note's most used nouns, verbs, adjectives and adverbs (names and world terms left out), each a button that walks through its uses.
+
+## Story view
+
+*Open story view* (or the button at the foot of the outline) opens the whole book in the right sidebar. Everything in it is derived from your notes: nothing is detected, and nothing in a note is changed.
+
+**What counts as the book.** A note in your prose folders named `chapter.scene` is a scene: `04.02 - Breakfast Bar` is scene 2 of chapter 4, and the numbers are the reading order. A note numbered `.00` is that chapter's outline: `04.00 - The Job`. Other notes in the prose folders are left out. (With no prose folders set, a note must also say `type: draft` or `type: chapter`.)
+
+**A chapter outline** is a plan with no prose: a card, and one heading per beat, each with the same hidden card the sidebar already reads. A link under a beat attaches a scene to it:
+
+```
+# The Job
+%%Card.
+Chapter shape: Lie first, then stack.
+%%
+
+## Breakfast Bar
+%%Beat.
+target: 400
+who: Linh, Ruoi, Chef
+change: Ruoi talks of leaving
+%%
+[[04.02 - Breakfast Bar]]
+```
+
+With the cursor in a beat, **Create scene from beat** makes the next numbered scene file from your scene template (set in settings; a plain one is built in), fills `pov` from the chapter and `characters` from the beat's `who:` line, and adds the link under the beat. A beat with no link reads "not drafted"; a scene named after a beat attaches to it without a link; any other scene of the chapter is listed as not in the outline. In the chapter note itself, the outline's Beats section counts each beat's scenes instead of its own words.
+
+**In a scene**, the outline's Scene section shows its beat from the chapter note (the card, and words against the beat's target), so the plan sits beside the prose instead of above it, along with the promises the scene makes, moves on or pays.
+
+**Book.** Chapters in order; under each, its beats and their scenes. A scene row shows its words (against its `target`, or its beat's), the three passes (`dev`, `line`, `continuity` in the properties: filled once dated), and how many annotations are left to clear. Hover for the summary, who is in it and the breakdown; click to open it, Ctrl/Cmd-click for a new tab.
+
+**Promises.** Name a promise under `promises:` in the scene that makes it, under `progresses:` where it moves on, and under `pays:` where it pays off. The view lists every name with where each happened and a status worked out from reading order: *open*, *progressing* or *paid*. Two warnings catch slips: *paid before it was made*, and *never made* (paid or progressed with no scene making it, usually a name spelt two ways). A promise repeated by several scenes of one chapter is shown once, for the chapter.
+
+**Reading a chapter, or the book.** *Read through this chapter* (also "read" beside a chapter in the story view, and a button at the foot of the outline) and *Read through the book* open the scenes as one continuous page in reading view. The page is a note in `_proseprince` that only embeds each scene, in reading order, so it holds no copy of your prose and always shows the scenes as they are now. Your properties, hidden comments and callouts don't show; a scene's own title becomes a small signpost, and the link icon beside it opens the scene for editing. Scenes with nothing written yet are left out. The note is rewritten when you run the command and its list of scenes has changed, so run it again after adding or renumbering scenes.
 
 ## Exercises
 
@@ -177,7 +211,7 @@ idle → analyse the rest of the note (cached) → note-level readability
 - **Phrase matching**: lexicon phrases are tokenised by the same tagger and stored in a trie keyed by word stems from lemmas, so one entry covers every tense and irregular form; any possessive matches any other ("ace up your/his sleeve"); leading articles are optional; longest match wins; matches never cross a sentence.
 - **Whole paragraphs, cached**: unchanged paragraphs are never re-tagged, sentences at the screen edge keep their context, and toggles re-filter cached results instantly.
 
-Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rules/`, lexicons in `lexicon/`, rhythm and readability; pure and unit-tested), `src/worker`, `src/editor` (paragraphs, cache, CodeMirror extension with hover cards), `src/lookup` (optional online lookups: Datamuse queries, ranking, re-inflection, cache, popover), `src/settings*.ts`, `src/main.ts`.
+Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rules/`, lexicons in `lexicon/`, rhythm and readability; pure and unit-tested), `src/worker`, `src/editor` (paragraphs, cache, CodeMirror extension with hover cards), `src/lookup` (optional online lookups: Datamuse queries, ranking, re-inflection, cache, popover), `src/settings*.ts`, `src/main.ts`; the book is `src/analysis/story.ts` (pure), `src/story.ts` (the index) and `src/storyView.ts`.
 
 ## Known limits
 
@@ -190,8 +224,9 @@ Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rule
 
 ## Roadmap
 
-Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18).
+Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18), the story view with chapter outlines, annotations and promises (0.19), reading a chapter or the book as one page (0.20).
 
+- Story tracking, next (see `docs/story-tracking-plan.md`): what the reader has been shown by each scene, a cast table, the notes a scene touches; scenes that need another look, and an inventory file; a clean compile for export.
 - Remaining Le Guin chapters: tense consistency (6), point of view and head-hopping (7–8; the frontmatter `pov` and the dialogue pronoun tracking are a start), telling markers (9), crowding map (10), sound (1; the lookup card's rhymes are a start).
 - More exercises (see `docs/exercise-mode-plan.md`): pure A/B dialogue, person and tense, points of view, cut it to half, beats added to bare dialogue.
 - Writer's own word lists (a Words lens), seeded from the sidebar's repeated words and the words you replace most in lookups; then Accents: words a character would or wouldn't say, building on the voices table.

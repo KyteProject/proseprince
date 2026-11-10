@@ -1,14 +1,37 @@
 import { EditorView } from "@codemirror/view";
-import { ItemView, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Keymap, type WorkspaceLeaf } from "obsidian";
 import { rhythmTier } from "./analysis/rhythm";
 import { type CheckKind, kindSlug } from "./analysis/types";
 import { READING_WPM } from "./analysis/outline";
+import { type AnnotationKind, type PromiseStatus, TO_CLEAR } from "./analysis/story";
 import { LONG_SENTENCE, type StyleFigures } from "./analysis/readability";
 import type { OutlineReport } from "./editor/highlighter";
 import type { ExerciseReport } from "./exercises/evaluate";
 import { CHECK_GROUPS, CHECK_INFO } from "./settingsModel";
+import { ANNOTATION_LABELS, PROMISE_LABELS } from "./storyView";
 
 export const OUTLINE_VIEW = "proseprince-outline";
+
+/** A scene (or unplanned stretch) listed under a chapter note's beat. */
+export interface OutlineSceneLink {
+	path: string;
+	label: string;
+	words: number;
+}
+
+/** Where the note sits in the book: for a scene, its beat in the chapter's outline; for a chapter note, its scenes. */
+export interface OutlineStory {
+	kind: "chapter" | "scene";
+	/** A scene's chapter note, when the chapter has one. */
+	chapter?: { path: string; title: string };
+	/** A scene's beat from the chapter note: null when the chapter has an outline and this scene isn't in it. */
+	beat?: { text: string; card: [string, string][]; target?: number } | null;
+	promises: { role: "Makes" | "Progresses" | "Pays"; name: string; status: PromiseStatus }[];
+	/** A chapter note's beats, in outline order, with the scenes attached to each. */
+	beats?: { text: string; target?: number; scenes: OutlineSceneLink[] }[];
+	/** A chapter note's scenes that no beat claims. */
+	unplanned?: OutlineSceneLink[];
+}
 
 /** What the sidebar needs besides the report: the note, its frontmatter, and where to jump. */
 export interface OutlineContext {
@@ -24,6 +47,14 @@ export interface OutlineContext {
 	onToggleAllChecks(): void;
 	onVoices(): void;
 	onFocusEditor(): void;
+	/** The note's place in the book, when it is a chapter note or a scene. */
+	story: OutlineStory | null;
+	/** Whether to offer the link to the story view. */
+	storyLink: boolean;
+	onOpenPath(path: string, newTab: boolean): void;
+	onOpenStory(): void;
+	/** Read the note's chapter as one page. */
+	onReadChapter(): void;
 }
 
 /** Frontmatter fields shown on the scene card, in this order. */
@@ -148,14 +179,25 @@ export class OutlineView extends ItemView {
 		root.createDiv({ cls: "pp-outline-title", text: report.title ?? ctx.title });
 		if (report.pending) root.createDiv({ cls: "pp-outline-note", text: `Analysing ${report.pending} more paragraph${report.pending === 1 ? "" : "s"}…` });
 		if (report.exercise) this.exercise(root, report.exercise);
-		this.sceneCard(root, ctx);
+		this.sceneCard(root, report, ctx);
 		this.numbers(root, report, ctx);
 		this.beats(root, report, ctx);
+		// An exercise note's checkboxes are its own self-check, not fixes left in a draft.
+		if (!report.exercise) this.annotations(root, report, ctx);
 		this.rhythm(root, report, ctx);
 		// Exercise notes are strict: the exercise's rules replace the usual issues.
 		if (!report.exercise) this.issues(root, report, ctx);
 		this.dialogue(root, report, ctx);
 		this.repeated(root, report, ctx);
+		if (ctx.story) {
+			const read = root.createEl("button", { cls: "pp-outline-button pp-story-open", text: "Read this chapter…" });
+			read.setAttribute("aria-label", "The chapter's written scenes, in order, as one page");
+			read.onclick = () => ctx.onReadChapter();
+		}
+		if (ctx.storyLink) {
+			const link = root.createEl("button", { cls: `pp-outline-button pp-story-open${ctx.story ? " is-second" : ""}`, text: "Story view: the whole book…" });
+			link.onclick = () => ctx.onOpenStory();
+		}
 		this.setCursor(ctx.cursor);
 	}
 
@@ -180,18 +222,77 @@ export class OutlineView extends ItemView {
 		this.ctx?.onFocusEditor();
 	}
 
-	private sceneCard(root: HTMLElement, ctx: OutlineContext): void {
+	private sceneCard(root: HTMLElement, r: OutlineReport, ctx: OutlineContext): void {
 		const fm = ctx.frontmatter;
+		const story = ctx.story;
 		const shown = SCENE_FIELDS.filter(([key]) => present(fm[key]));
 		const summary = present(fm.summary) ? String(fm.summary) : "";
-		if (!shown.length && !summary) return;
-		const body = this.section(root, "scene", "Scene");
+		const placed = !!story && (story.beat !== undefined || story.promises.length > 0 || !!story.unplanned?.length);
+		if (!shown.length && !summary && !placed) return;
+		const body = this.section(root, "scene", story?.kind === "chapter" ? "Chapter" : "Scene");
 		if (summary) body.createDiv({ cls: "pp-outline-summary", text: summary });
-		const grid = body.createDiv({ cls: "pp-outline-grid" });
-		for (const [key, label] of shown) {
-			grid.createDiv({ cls: "pp-outline-key", text: label });
-			const v = fm[key];
-			grid.createDiv({ cls: "pp-outline-value", text: Array.isArray(v) ? v.map(String).join(", ").replace(/\[\[|\]\]/g, "") : String(v).replace(/\[\[|\]\]/g, "") });
+		if (shown.length) {
+			const grid = body.createDiv({ cls: "pp-outline-grid" });
+			for (const [key, label] of shown) {
+				grid.createDiv({ cls: "pp-outline-key", text: label });
+				const v = fm[key];
+				grid.createDiv({ cls: "pp-outline-value", text: Array.isArray(v) ? v.map(String).join(", ").replace(/\[\[|\]\]/g, "") : String(v).replace(/\[\[|\]\]/g, "") });
+			}
+		}
+		if (story) this.place(body, story, r, ctx);
+	}
+
+	/** The scene's beat from the chapter note, and the promises it makes, moves on or pays. */
+	private place(body: HTMLElement, story: OutlineStory, r: OutlineReport, ctx: OutlineContext): void {
+		const link = (el: HTMLElement, path: string) => {
+			el.addClass("is-link");
+			el.onclick = (evt) => ctx.onOpenPath(path, Keymap.isModEvent(evt) !== false);
+		};
+		if (story.beat) {
+			const head = body.createDiv({ cls: "pp-outline-group pp-story-beat-head" });
+			head.createSpan({ text: `Beat: ${story.beat.text}` });
+			if (story.chapter) {
+				const from = head.createSpan({ cls: "pp-story-ref", text: story.chapter.title ? `in ${story.chapter.title}` : "chapter outline" });
+				from.setAttribute("aria-label", "Open the chapter's outline");
+				link(from, story.chapter.path);
+			}
+			if (story.beat.card.length) {
+				const grid = body.createDiv({ cls: "pp-outline-grid pp-story-card" });
+				for (const [key, value] of story.beat.card) {
+					grid.createDiv({ cls: "pp-outline-key", text: key });
+					grid.createDiv({ cls: "pp-outline-value", text: value.replace(/\[\[|\]\]/g, "") });
+				}
+			}
+			const target = story.beat.target;
+			if (target && !(Number(ctx.frontmatter.target) > 0)) {
+				const bar = body.createDiv({ cls: "pp-outline-target" });
+				bar.createDiv({ cls: "pp-outline-target-fill" }).style.width = `${Math.min(100, (r.words / target) * 100)}%`;
+				body.createDiv({ cls: "pp-outline-note", text: `${num(r.words)} of the beat's ${num(target)} words (${pct(r.words / target)})` });
+			}
+		} else if (story.beat === null && story.chapter) {
+			const note = body.createDiv({ cls: "pp-outline-note" });
+			note.createSpan({ text: "Not in the chapter's outline yet: link this scene under a beat in " });
+			link(note.createSpan({ cls: "pp-story-ref", text: story.chapter.title || "the chapter note" }), story.chapter.path);
+			note.createSpan({ text: "." });
+		}
+		for (const role of ["Makes", "Progresses", "Pays"] as const) {
+			const mine = story.promises.filter((p) => p.role === role);
+			if (!mine.length) continue;
+			const line = body.createDiv({ cls: "pp-promise-line" });
+			line.createSpan({ cls: "pp-outline-key", text: role });
+			for (const p of mine) {
+				const chip = line.createSpan({ cls: `pp-promise-chip is-${p.status}`, text: p.name });
+				chip.setAttribute("aria-label", `${p.name}: ${PROMISE_LABELS[p.status]}`);
+			}
+		}
+		if (story.unplanned?.length) {
+			body.createDiv({ cls: "pp-outline-group", text: "Scenes not in the outline" });
+			for (const s of story.unplanned) {
+				const row = body.createDiv({ cls: "pp-outline-row" });
+				row.createSpan({ cls: "pp-outline-row-name", text: s.label });
+				row.createSpan({ cls: "pp-outline-row-count", text: num(s.words) });
+				link(row, s.path);
+			}
 		}
 	}
 
@@ -258,8 +359,19 @@ export class OutlineView extends ItemView {
 		if (!r.beats.length) return;
 		const body = this.section(root, "beats", `Beats (${r.beats.filter((b) => !b.opening).length})`);
 		const minLevel = Math.min(...r.beats.map((b) => b.level));
-		const most = Math.max(...r.beats.map((b) => b.words), 1);
-		for (const b of r.beats) {
+		// A chapter note is a plan: each beat's words are the words of the scenes attached to it.
+		const planned = ctx.story?.kind === "chapter" ? (ctx.story.beats ?? []) : null;
+		let heading = 0;
+		const plans = r.beats.map((b) => {
+			if (!planned || b.opening) return null;
+			const plan = planned[heading++];
+			return plan && plan.text === b.text ? plan : null;
+		});
+		const wordsOf = (b: OutlineReport["beats"][number], i: number) => (plans[i] ? plans[i]!.scenes.reduce((n, s) => n + s.words, 0) : b.words);
+		const most = Math.max(...r.beats.map(wordsOf), 1);
+		for (const [i, raw] of r.beats.entries()) {
+			const plan = plans[i];
+			const b = plan ? { ...raw, words: wordsOf(raw, i), dialogue: 0 } : raw;
 			const row = body.createDiv({ cls: "pp-beat" });
 			row.style.paddingLeft = `${(b.level - minLevel) * 12}px`;
 			const head = row.createDiv({ cls: "pp-beat-head" });
@@ -292,7 +404,23 @@ export class OutlineView extends ItemView {
 			].join(" · ");
 			row.setAttribute("aria-label", b.change ? `${tip}\nChange: ${b.change}` : tip);
 			row.onclick = () => this.jump(Math.max(0, b.from));
+			if (plan) {
+				const list = row.createDiv({ cls: "pp-beat-scenes" });
+				if (!plan.scenes.length) list.createSpan({ cls: "pp-beat-undrafted", text: "not drafted" });
+				for (const s of plan.scenes) {
+					const link = list.createSpan({ cls: "pp-story-ref is-link", text: `${s.label} · ${num(s.words)}` });
+					link.setAttribute("aria-label", "Open this scene");
+					link.onclick = (evt) => {
+						evt.stopPropagation();
+						ctx.onOpenPath(s.path, Keymap.isModEvent(evt) !== false);
+					};
+				}
+			}
 			this.beatRows.push(row);
+		}
+		if (planned) {
+			body.createDiv({ cls: "pp-outline-note", text: "A chapter outline: each beat counts the words of the scenes linked under it. With the cursor in a beat, run \"Create scene from beat\" to start its scene." });
+			return;
 		}
 		body.createDiv({
 			cls: "pp-outline-note",
@@ -318,6 +446,34 @@ export class OutlineView extends ItemView {
 		for (const name of b.unlisted ?? []) {
 			const span = line.createSpan({ cls: "pp-who pp-who-unlisted", text: `+${name}` });
 			span.setAttribute("aria-label", `${name} speaks here but isn't in the beat's who: line`);
+		}
+	}
+
+	/** The writer's own marks in the note, by kind: what is left to clear, and what the pipeline has handled. */
+	private annotations(root: HTMLElement, r: OutlineReport, ctx: OutlineContext): void {
+		if (!r.annotations.length) return;
+		const of = (kind: AnnotationKind) => r.annotations.filter((a) => a.kind === kind);
+		const left = r.annotations.filter((a) => TO_CLEAR.includes(a.kind)).length;
+		const body = this.section(root, "annotations", `Annotations (${num(left)} to clear)`);
+		const rows = (kinds: readonly AnnotationKind[], done: boolean) => {
+			for (const kind of kinds) {
+				const found = of(kind);
+				if (!found.length) continue;
+				const label = ANNOTATION_LABELS[kind][1];
+				const row = body.createDiv({ cls: `pp-outline-row${done ? " pp-annotation-done" : ""}` });
+				row.createSpan({ cls: `pp-annotation-dot is-${kind}` });
+				row.createSpan({ cls: "pp-outline-row-name", text: label.charAt(0).toUpperCase() + label.slice(1) });
+				row.createSpan({ cls: "pp-outline-row-count", text: num(found.length) });
+				const sample = found.slice(0, 6).map((a) => `· ${a.text.length > 70 ? `${a.text.slice(0, 70)}…` : a.text || "(no text)"}`).join("\n");
+				row.setAttribute("aria-label", `${sample}${found.length > 6 ? `\n· and ${found.length - 6} more` : ""}\nClick to go to the next one`);
+				row.onclick = () => this.jump(this.next(`annotation:${kind}`, found.map((a) => a.from), ctx.cursor));
+			}
+		};
+		rows(TO_CLEAR, false);
+		const handled = (["filed", "checked"] as const).filter((k) => of(k).length);
+		if (handled.length) {
+			body.createDiv({ cls: "pp-outline-group", text: "Already handled" });
+			rows(handled, true);
 		}
 	}
 

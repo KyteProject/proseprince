@@ -11,9 +11,14 @@ import { openLookupPopover } from "./lookup/popover";
 import { LookupService } from "./lookup/service";
 import { type HintResult, type PairingResult, suggestForHint, usualPairings } from "./lookup/suggest";
 import type { LookupHint, Pairing } from "./analysis/types";
+import { excludedBlocks } from "./analysis/mask";
+import { beatAt, beatNotes, beatsOf, headingsIn } from "./analysis/outline";
+import { fillSceneTemplate, nextSceneNumber, parseSceneName, readThrough, SCENE_TEMPLATE, sceneFileName, sceneLabel, scenePromises, type SceneRecord } from "./analysis/story";
 import { ProsePrinceSettingTab } from "./settings";
 import type { OutlineReport } from "./editor/highlighter";
-import { OUTLINE_VIEW, OutlineView } from "./sidebar";
+import { OUTLINE_VIEW, type OutlineStory, OutlineView } from "./sidebar";
+import { StoryIndex } from "./story";
+import { STORY_VIEW, StoryView } from "./storyView";
 import { VoicesModal } from "./voicesModal";
 import {
 	activeLenses,
@@ -63,6 +68,13 @@ export default class ProsePrincePlugin extends Plugin {
 		onChange: () => this.saveLookupCache(),
 	});
 	lookupHistory = new LookupHistory(() => this.saveLookupHistory());
+	/** The book: chapter notes and scenes in the prose folders, re-read when one of them changes. */
+	story = new StoryIndex(this.app, () => this.settings.folders);
+	private rebuildStory = debounce(async () => {
+		if (!(await this.story.rebuild())) return;
+		this.renderStory();
+		this.refreshOutline();
+	}, 600, true);
 	/** The Markdown editor the sidebar describes: the last one that had focus. */
 	private outlineSource: MarkdownView | null = null;
 	/** Prose words in each note when first seen this session, for "words this session". */
@@ -105,6 +117,49 @@ export default class ProsePrincePlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			this.outlineSource = this.app.workspace.getActiveViewOfType(MarkdownView);
 			this.refreshOutline();
+		});
+
+		// The story view: the whole book, rebuilt when a chapter note or scene is saved, renamed or deleted.
+		this.registerView(STORY_VIEW, (leaf: WorkspaceLeaf) => new StoryView(leaf));
+		this.addCommand({ id: "open-story", name: "Open story view", callback: () => void this.openStory() });
+		this.app.workspace.onLayoutReady(() => void this.rebuildStory());
+		this.registerEvent(this.app.metadataCache.on("resolved", () => void this.rebuildStory()));
+		this.registerEvent(this.app.metadataCache.on("changed", (file) => {
+			if (this.story.isRelevant(file) || this.story.knows(file.path)) void this.rebuildStory();
+		}));
+		this.registerEvent(this.app.vault.on("delete", (file) => {
+			if (this.story.knows(file.path)) void this.rebuildStory();
+		}));
+		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+			if (file instanceof TFile && (this.story.knows(oldPath) || this.story.isRelevant(file))) void this.rebuildStory();
+		}));
+		this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
+			const path = this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path;
+			if (path) for (const v of this.storyViews()) v.setCurrent(path);
+		}));
+		this.addCommand({
+			id: "read-chapter",
+			name: "Read through this chapter",
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				const record = file ? this.story.record(file.path) : undefined;
+				if (!record) return false;
+				if (!checking) void this.openReadThrough(record.name.chapter);
+				return true;
+			},
+		});
+		this.addCommand({ id: "read-book", name: "Read through the book", callback: () => void this.openReadThrough() });
+		this.addCommand({
+			id: "create-scene-from-beat",
+			name: "Create scene from beat",
+			editorCheckCallback: (checking: boolean, editor: Editor, ctx) => {
+				// Only in a chapter note ("04.00 - The Job"): its headings are the chapter's beats.
+				const file = ctx.file;
+				const name = file ? parseSceneName(file.basename) : null;
+				if (!file || !name || name.scene !== 0 || !this.story.isRelevant(file)) return false;
+				if (!checking) void this.createSceneFromBeat(editor, file, name.chapter);
+				return true;
+			},
 		});
 
 		this.lensItem = this.addStatusBarItem();
@@ -477,6 +532,138 @@ export default class ProsePrincePlugin extends Plugin {
 		new Notice(`ProsePrince: ${exercise.title}. The brief is folded at the top; only this exercise's rules are flagged.`);
 	}
 
+	/**
+	 * Start a scene for the beat at the cursor of a chapter note: a new numbered file from the scene
+	 * template, its people taken from the beat's `who:` line, and a link to it added under the beat.
+	 */
+	private async createSceneFromBeat(editor: Editor, chapterNote: TFile, chapter: number): Promise<void> {
+		const text = editor.getValue();
+		const headings = headingsIn(text, excludedBlocks(text));
+		const { beats } = beatsOf(headings);
+		const at = beatAt(beats, editor.posToOffset(editor.getCursor()));
+		const beat = beats[at];
+		if (!beat) {
+			new Notice("ProsePrince: put the cursor in a beat first (under one of the chapter's headings).");
+			return;
+		}
+		const folder = chapterNote.parent?.path && chapterNote.parent.path !== "/" ? chapterNote.parent.path : "";
+		const basename = sceneFileName(chapter, nextSceneNumber(this.story.namesIn(chapterNote.parent?.path ?? ""), chapter), beat.text);
+		const path = normalizePath(`${folder ? `${folder}/` : ""}${basename}.md`);
+		if (this.app.vault.getAbstractFileByPath(path)) {
+			new Notice(`ProsePrince: "${basename}" already exists.`);
+			return;
+		}
+		const templatePath = this.settings.sceneTemplate.trim();
+		const templateFile = templatePath ? this.app.vault.getAbstractFileByPath(normalizePath(templatePath)) : null;
+		const template = templateFile instanceof TFile ? await this.app.vault.cachedRead(templateFile) : SCENE_TEMPLATE;
+		const now = new Date();
+		const pov = this.app.metadataCache.getFileCache(chapterNote)?.frontmatter?.pov;
+		const file = await this.app.vault.create(path, fillSceneTemplate(template, {
+			title: beat.text,
+			date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+			pov: typeof pov === "string" ? pov.replace(/\[\[(?:[^\]|]*\|)?|\]\]/g, "").trim() || undefined : undefined,
+			characters: beatNotes(text, beats)[at]?.who,
+		}));
+		// The link goes on its own line at the end of the beat's section, before the next heading.
+		const next = headings.find((h) => h.from > beat.from);
+		let end = next ? next.from : text.length;
+		while (end > beat.to && /\s/.test(text[end - 1]!)) end--;
+		editor.replaceRange(`\n[[${basename}]]`, editor.offsetToPos(end));
+		await this.app.workspace.getLeaf("tab").openFile(file);
+		new Notice(`ProsePrince: created "${basename}" and linked it under "${beat.text}".`);
+	}
+
+	/**
+	 * Write the read-through note for a chapter (or the whole book) and open it in reading view. The note
+	 * only embeds the scenes, so it is rewritten whenever its list of scenes would differ, and never otherwise.
+	 */
+	private async openReadThrough(chapter?: number): Promise<void> {
+		await this.story.rebuild();
+		const page = readThrough(this.story.book, chapter);
+		if (!page) {
+			new Notice(chapter === undefined ? "ProsePrince: no written scenes found to read." : "ProsePrince: nothing is written in this chapter yet.");
+			return;
+		}
+		const folder = normalizePath(this.settings.readFolder.trim() || "_proseprince");
+		if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
+		const path = normalizePath(`${folder}/${page.name}.md`);
+		let file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) {
+			if ((await this.app.vault.read(file)) !== page.text) await this.app.vault.modify(file, page.text);
+		} else if (file) {
+			new Notice(`ProsePrince: ${path} is a folder, so the read-through can't be written there.`);
+			return;
+		} else file = await this.app.vault.create(path, page.text);
+		const target = file as TFile;
+		// Reuse the tab if this read-through is already open.
+		let leaf: WorkspaceLeaf | null = null;
+		this.app.workspace.iterateAllLeaves((l) => {
+			if (!leaf && l.view instanceof MarkdownView && l.view.file?.path === target.path) leaf = l;
+		});
+		const open = leaf ?? this.app.workspace.getLeaf("tab");
+		await open.openFile(target, { state: { mode: "preview" } });
+		this.app.workspace.setActiveLeaf(open, { focus: true });
+	}
+
+	/** Open the story view in the right sidebar (or reveal it if it's already there). */
+	private async openStory(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(STORY_VIEW)[0];
+		const leaf = existing ?? this.app.workspace.getRightLeaf(false);
+		if (!leaf) return;
+		if (!existing) await leaf.setViewState({ type: STORY_VIEW, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+		await this.story.rebuild();
+		this.renderStory();
+	}
+
+	private storyViews(): StoryView[] {
+		return this.app.workspace.getLeavesOfType(STORY_VIEW).map((l) => l.view).filter((v): v is StoryView => v instanceof StoryView);
+	}
+
+	private renderStory(): void {
+		const current = (this.outlineSource?.file ?? this.app.workspace.getActiveFile())?.path ?? null;
+		for (const v of this.storyViews()) v.show({ book: this.story.book, current, onOpen: (path, newTab) => void this.openPath(path, newTab), onRead: (chapter) => void this.openReadThrough(chapter) });
+	}
+
+	/** Open a note from a sidebar: in the editor last used, or a new tab with Ctrl/Cmd-click. */
+	private async openPath(path: string, newTab: boolean): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			new Notice(`ProsePrince: couldn't find ${path}. It may have been renamed.`);
+			return;
+		}
+		const leaf = this.app.workspace.getLeaf(newTab ? "tab" : false);
+		await leaf.openFile(file);
+		this.app.workspace.setActiveLeaf(leaf, { focus: true });
+	}
+
+	/** Where a note sits in the book, for the outline: a scene's beat and promises, or a chapter note's scenes. */
+	private storyFor(file: TFile): OutlineStory | null {
+		const record = this.story.record(file.path);
+		if (!record) return null;
+		const book = this.story.book;
+		const promises = scenePromises(book, record);
+		const link = (s: SceneRecord) => ({ path: s.path, label: sceneLabel(s), words: s.words });
+		if (record.kind === "chapter") {
+			const chapter = book.chapters.find((c) => c.note?.path === record.path);
+			return {
+				kind: "chapter",
+				promises,
+				beats: (chapter?.beats ?? []).map((b) => ({ text: b.text, target: b.target, scenes: b.scenes.map(link) })),
+				unplanned: (chapter?.unplanned ?? []).map(link),
+			};
+		}
+		const place = book.places.get(record.path);
+		const note = place?.chapter.note;
+		return {
+			kind: "scene",
+			promises,
+			...(note ? { chapter: { path: note.path, title: place.chapter.title } } : {}),
+			// Unset when the chapter has no outline; null when it has one and this scene isn't in it.
+			...(place?.beat ? { beat: { text: place.beat.text, card: place.beat.card, target: place.beat.target } } : place?.chapter.beats.length ? { beat: null } : {}),
+		};
+	}
+
 	/** Open the outline in the right sidebar (or reveal it if it's already there). */
 	private async openOutline(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(OUTLINE_VIEW)[0];
@@ -529,6 +716,14 @@ export default class ProsePrincePlugin extends Plugin {
 				},
 				onVoices: () => void this.showVoices(cm, file.basename),
 				onFocusEditor: () => this.app.workspace.setActiveLeaf(md.leaf, { focus: true }),
+				story: this.storyFor(file),
+				storyLink: this.settings.storyLink,
+				onOpenPath: (path, newTab) => void this.openPath(path, newTab),
+				onOpenStory: () => void this.openStory(),
+				onReadChapter: () => {
+					const chapter = this.story.record(file.path)?.name.chapter;
+					if (chapter !== undefined) void this.openReadThrough(chapter);
+				},
 			});
 		}
 	}
@@ -722,6 +917,8 @@ export default class ProsePrincePlugin extends Plugin {
 		this.refreshEditors();
 		this.renderReadability();
 		this.refreshOutline();
+		// The prose folders decide what the book is.
+		void this.rebuildStory();
 	}
 
 	/** Re-apply highlighting in every open Markdown editor. */

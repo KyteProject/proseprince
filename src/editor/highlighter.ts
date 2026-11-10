@@ -2,6 +2,7 @@ import { StateEffect, StateField, type Extension, type Range as DecorationRange,
 import { Decoration, type DecorationSet, EditorView, hoverTooltip, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { filterHighlights } from "../analysis/filter";
 import { excludedBlocks, maskInline, type Range } from "../analysis/mask";
+import { type Annotation, annotationsIn } from "../analysis/story";
 import { namesIn, namesInText } from "../analysis/names";
 import { combine, report, type ReadabilityReport, type StyleFigures, styleOf } from "../analysis/readability";
 import { attribute, type Attribution, colourSlots, type ParagraphDialogue, pinIn, resetsTurns, speakersIn, UNTAGGED_RUN, untaggedRuns } from "../analysis/dialogue/attribute";
@@ -173,6 +174,8 @@ export interface OutlineReport {
 	sentences: { from: number; length: number }[];
 	/** The note's most repeated content words, with where each use is. */
 	repeated: { word: string; n: number; positions: number[] }[];
+	/** The writer's own marks in the note: callouts, filed comments, fix-later boxes, stumbles, placeholders. */
+	annotations: Annotation[];
 }
 
 /** Everything the "Voices in this note" window shows. */
@@ -267,6 +270,14 @@ function excludedFor(doc: Text): Range[] {
 
 function allParagraphs(doc: Text): Paragraph[] {
 	return applyExclusions(paragraphsAround(doc, [{ from: 0, to: doc.length }]), excludedFor(doc));
+}
+
+/** The writer's annotations, per document version. */
+const annotationCache = new WeakMap<Text, Annotation[]>();
+function annotationsFor(doc: Text): Annotation[] {
+	let a = annotationCache.get(doc);
+	if (!a) annotationCache.set(doc, (a = annotationsIn(doc.toString(), excludedFor(doc))));
+	return a;
 }
 
 /** The note's beats and the notes under them (target, change, who), per document version. */
@@ -802,6 +813,7 @@ export class HighlightRunner {
 			},
 			sentences,
 			repeated,
+			annotations: annotationsFor(doc),
 		};
 	}
 

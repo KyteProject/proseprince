@@ -448,3 +448,72 @@ body.theme-dark .pp-exercise-breach { background-color: rgba(255, 179, 92, 0.2);
 .pp-shape-compare { height: 28px; }
 .pp-spark-model { background: var(--text-faint); }
 .pp-spark-yours { background: var(--interactive-accent); }
+
+/* ── Story: annotations, the scene's place, the story view ─────────────────── */
+.pp-annotation-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-faint); }
+.pp-annotation-dot.is-note { background: var(--color-blue, #4c8dff); }
+.pp-annotation-dot.is-question { background: var(--color-yellow, #e0ac00); }
+.pp-annotation-dot.is-todo, .pp-annotation-dot.is-fix { background: var(--color-orange, #e58e26); }
+.pp-annotation-dot.is-check { background: var(--color-purple, #a882ff); }
+.pp-annotation-dot.is-stumble { background: var(--color-pink, #fa99cd); }
+.pp-annotation-dot.is-placeholder { background: var(--color-cyan, #53dfdd); }
+.pp-annotation-done { color: var(--text-faint); }
+.pp-annotation-done .pp-annotation-dot { background: var(--color-green, #44cf6e); opacity: 0.6; }
+
+.pp-story-beat-head { display: flex; align-items: baseline; gap: 6px; color: var(--text-muted); }
+.pp-story-card { margin-top: 2px; font-size: var(--font-ui-smaller); }
+.pp-story-ref { color: var(--text-accent); }
+.is-link { cursor: pointer; }
+.pp-story-ref.is-link:hover { text-decoration: underline; }
+.pp-promise-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; margin-top: 4px; }
+.pp-promise-chip { border-radius: 8px; padding: 0 6px; font-size: var(--font-ui-smaller); background: var(--background-secondary); border: 1px solid var(--background-modifier-border); }
+.pp-promise-chip.is-progressing { border-color: var(--interactive-accent); }
+.pp-promise-chip.is-paid { color: var(--text-faint); text-decoration: line-through; }
+.pp-promise-chip.is-paid-before-made, .pp-promise-chip.is-never-made { border-color: var(--color-orange, #e58e26); color: var(--color-orange, #e58e26); }
+.pp-beat-scenes { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 2px; font-size: var(--font-ui-smaller); }
+.pp-beat-undrafted { color: var(--text-faint); font-style: italic; }
+.pp-story-open { width: 100%; margin-top: 14px; }
+
+.pp-story-chapter { margin-top: 6px; }
+.pp-story-chapter > summary { cursor: pointer; font-weight: 600; display: flex; align-items: baseline; gap: 6px; list-style: revert; }
+.pp-story-chapter > summary .pp-beat-words { margin-left: auto; font-weight: 400; }
+.pp-story-chapter > .pp-outline-body { margin: 2px 0 0 4px; padding-left: 6px; border-left: 1px solid var(--background-modifier-border); }
+.pp-story-row { padding: 2px 4px; border-radius: var(--radius-s); }
+.pp-story-row.is-link:hover, .pp-story-beat.is-link:hover { background: var(--background-modifier-hover); }
+.pp-story-row.is-current { background: var(--background-modifier-active-hover, var(--background-modifier-hover)); }
+.pp-story-row.is-indented { margin-left: 10px; }
+.pp-story-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-story-note { display: flex; align-items: baseline; gap: 6px; color: var(--text-muted); font-style: italic; }
+.pp-story-beat { display: flex; align-items: baseline; gap: 6px; padding: 2px 4px; margin-top: 3px; border-radius: var(--radius-s); color: var(--text-muted); font-size: var(--font-ui-smaller); text-transform: uppercase; letter-spacing: 0.03em; }
+.pp-story-beat.is-empty .pp-beat-words { font-style: italic; }
+.pp-story-warn { color: var(--color-orange, #e58e26); }
+.pp-story-flags { display: inline-flex; gap: 2px; }
+.pp-story-flag { font-size: 0.75em; line-height: 1.3; padding: 0 3px; border-radius: 3px; color: var(--text-faint); border: 1px solid var(--background-modifier-border); }
+.pp-story-flag.is-done { color: var(--text-on-accent); background: var(--interactive-accent); border-color: var(--interactive-accent); }
+.pp-story .pp-beat-track { margin-top: 2px; }
+
+.pp-promise { cursor: pointer; margin-top: 2px; }
+.pp-promise-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; background: var(--color-yellow, #e0ac00); }
+.pp-promise.is-progressing .pp-promise-dot { background: var(--interactive-accent); }
+.pp-promise.is-paid .pp-promise-dot { background: var(--color-green, #44cf6e); }
+.pp-promise.is-paid .pp-story-name { color: var(--text-muted); }
+.pp-promise.is-paid-before-made .pp-promise-dot, .pp-promise.is-never-made .pp-promise-dot { background: var(--color-orange, #e58e26); }
+.pp-promise.is-paid-before-made .pp-beat-words, .pp-promise.is-never-made .pp-beat-words { color: var(--color-orange, #e58e26); }
+.pp-promise-trail { margin-left: 14px; font-size: var(--font-ui-smaller); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 0 10px; }
+
+/* ── Read-through: a note of embedded scenes, shown as one continuous page ──── */
+.pp-readthrough { --embed-max-height: none; --embed-padding: 0; }
+.pp-readthrough .internal-embed.markdown-embed { border: 0; border-inline-start: 0; padding: 0; margin: 0; }
+.pp-readthrough .markdown-embed .markdown-embed-title { display: none; }
+.pp-readthrough .markdown-embed .markdown-embed-content { max-height: none; overflow: visible; padding: 0; }
+.pp-readthrough .markdown-embed .markdown-embed-content > .markdown-preview-view { padding: 0; overflow: visible; }
+/* Notes to yourself stay in the scene: callouts and task boxes are not part of the read. */
+.pp-readthrough .markdown-embed .callout { display: none; }
+.pp-readthrough .markdown-embed .metadata-container, .pp-readthrough .markdown-embed .mod-header, .pp-readthrough .markdown-embed .mod-footer { display: none; }
+/* A scene's own title is a quiet signpost, not a chapter heading. */
+.pp-readthrough .markdown-embed h1 { font-size: var(--font-ui-small); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin: 1.2em 0 0.6em; }
+.pp-readthrough .markdown-embed .markdown-embed-link { opacity: 0.35; }
+.pp-readthrough .markdown-embed .markdown-embed-link:hover { opacity: 1; }
+.pp-story-read { font-weight: 400; font-size: var(--font-ui-smaller); }
+.pp-story-read-book { width: 100%; margin: 8px 0 2px; }
+.pp-story-open.is-second { margin-top: 6px; }
