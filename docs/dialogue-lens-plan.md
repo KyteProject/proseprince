@@ -25,7 +25,7 @@ It also nudges dialogue towards standard fiction conventions (punctuation, tags,
 
 ## 1. Finding speech and thought
 
-- **Speech:** straight and curly double quotes, as now. A quote left open at the end of a paragraph continues into the next one, as it does now.
+- **Speech:** straight and curly double quotes, as now. Since 0.24.1 a closing curly mark standing where a quote opens (”Hi,” she said: the Swedish and Finnish form, and what some converters leave) opens one too; a stray closing mark anywhere else is left alone. A quote left open at the end of a paragraph continues into the next one, as it does now.
 - **Thought:** italics covering a whole sentence or paragraph, or speech with a thought verb as its tag (*thought*, *wondered*). Thought gets a lighter, dashed underline.
 - **Single quotes:** an option, off by default. Your drafts use double quotes, and single quotes mostly show up as mistakes.
 - **Later:** dash-style dialogue and guillemets.

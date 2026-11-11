@@ -110,7 +110,11 @@ export function excludedBlocks(doc: string): Range[] {
 	return ranges;
 }
 
-/** Ranges of quoted dialogue in a (masked) paragraph: straight and curly double quotes. */
+/**
+ * Ranges of quoted dialogue in a (masked) paragraph: straight and curly double quotes. Some texts
+ * use the closing mark at both ends (”Hi,” she said: the Swedish and Finnish form, and what some
+ * converters leave behind), so a ” with no quote open, standing where a quote opens, opens one.
+ */
 export function dialogueRanges(text: string): Range[] {
 	const ranges: Range[] = [];
 	let start = -1;
@@ -118,8 +122,10 @@ export function dialogueRanges(text: string): Range[] {
 		const c = text[i];
 		if (c === "“") start = i;
 		else if (c === "”") {
-			if (start !== -1) ranges.push({ from: start, to: i + 1 });
-			start = -1;
+			if (start !== -1) {
+				ranges.push({ from: start, to: i + 1 });
+				start = -1;
+			} else if ((i === 0 || /[\s(\[—–]/.test(text[i - 1]!)) && /\S/.test(text[i + 1] ?? "")) start = i;
 		} else if (c === '"') {
 			if (start === -1) start = i;
 			else {

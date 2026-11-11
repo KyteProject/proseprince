@@ -62,6 +62,20 @@ describe("dialogueRanges", () => {
 		const text = `"Hi," she said. “Bye.”`;
 		expect(dialogueRanges(text).map((r) => text.slice(r.from, r.to))).toEqual([`"Hi,"`, "“Bye.”"]);
 	});
+
+	it("takes a closing mark for an opening one where a quote opens", () => {
+		const text = "”It’s only a hill,” she said. ”You go on.”";
+		expect(dialogueRanges(text).map((r) => text.slice(r.from, r.to))).toEqual(["”It’s only a hill,”", "”You go on.”"]);
+		const unclosed = "”It goes on.";
+		expect(dialogueRanges(unclosed)).toEqual([{ from: 0, to: unclosed.length }]);
+	});
+
+	it("leaves a stray closing mark alone", () => {
+		expect(dialogueRanges("Go on,” she said. Then she left.")).toEqual([]);
+		expect(dialogueRanges("She waited— ” and then nothing.")).toEqual([]);
+		const text = "“Wait—” She stopped.";
+		expect(dialogueRanges(text).map((r) => text.slice(r.from, r.to))).toEqual(["“Wait—”"]);
+	});
 });
 
 describe("clichés", () => {
