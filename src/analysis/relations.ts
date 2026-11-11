@@ -1,3 +1,4 @@
+import type { SceneSpeech } from "./dialogue/scene";
 import { excludedBlocks } from "./mask";
 import { isNamedPerson } from "./outline";
 import { asNames, type Book, linkTarget, type SceneRecord } from "./story";
@@ -141,7 +142,7 @@ export interface Filing {
 	elsewhere: SceneRecord[];
 }
 
-export type CastIssueKind = "unnamed" | "beat-only" | "scene-only";
+export type CastIssueKind = "unnamed" | "beat-only" | "scene-only" | "speaks-unlisted";
 
 export interface CastRow {
 	name: string;
@@ -150,9 +151,30 @@ export interface CastRow {
 	present: SceneRecord[];
 	/** Scenes whose prose names them though the properties don't. */
 	mentioned: SceneRecord[];
+	/** Scenes where a line of speech is theirs: by a tag, a pinned speaker, an action beat or a pronoun the scene settles. Never by a guess. */
+	spoke: SceneRecord[];
 	first?: SceneRecord;
 	last?: SceneRecord;
 	issues: { kind: CastIssueKind; scene: SceneRecord }[];
+}
+
+/** Someone who speaks in a scene, under the name the cast knows them by. */
+export interface SceneSpeaker {
+	name: string;
+	note: CanonNote | null;
+	/** Lines that are theirs by a tag, a pin, a beat or a settled pronoun. */
+	lines: number;
+	/** Lines guessed from turn-taking. */
+	guessed: number;
+}
+
+export interface SceneSpeakers {
+	/** In order of first line. */
+	speakers: SceneSpeaker[];
+	/** Every line of speech in the scene. */
+	lines: number;
+	/** Lines no rule could give to anyone. */
+	unknown: number;
 }
 
 export interface Relations {
@@ -165,6 +187,8 @@ export interface Relations {
 	/** By note path, in reading order. */
 	touchedBy: Map<string, { scene: SceneRecord; touch: Touch }[]>;
 	cast: CastRow[];
+	/** Who speaks, by scene path: only scenes whose speech has been read. */
+	speech: Map<string, SceneSpeakers>;
 	filings: Filing[];
 	/** A name two notes both claim: it isn't counted as a mention of either. */
 	ambiguous: { name: string; notes: CanonNote[] }[];
@@ -174,7 +198,20 @@ export interface Relations {
 	hasDays: boolean;
 }
 
-export const EMPTY_RELATIONS: Relations = { notes: [], reveals: [], touches: new Map(), touchedBy: new Map(), cast: [], filings: [], ambiguous: [], quiet: [], hasDays: false };
+export const EMPTY_RELATIONS: Relations = { notes: [], reveals: [], touches: new Map(), touchedBy: new Map(), cast: [], speech: new Map(), filings: [], ambiguous: [], quiet: [], hasDays: false };
+
+/** How a scene and a note are connected, in a few words: "pov · 2 facts · named". */
+export function touchLabel(t: Touch): string {
+	const declared = t.declared.map((d) => (d === "beat" ? "in the beat" : d === "character" ? "in the scene" : d));
+	return [...declared, t.facts ? `${t.facts.toLocaleString()} ${t.facts === 1 ? "fact" : "facts"}` : "", !t.facts && t.filed ? `${t.filed.toLocaleString()} filed` : "", t.mentions.length ? "named" : ""].filter(Boolean).join(" · ");
+}
+
+/** Who speaks in a scene, in a line: "Mara 12 · Oskar 3 (+2 guessed) · 4 lines not placed". */
+export function speechLabel(s: SceneSpeakers): string {
+	const n = (x: number) => x.toLocaleString();
+	const who = s.speakers.map((k) => (k.lines ? `${k.name} ${n(k.lines)}${k.guessed ? ` (+${n(k.guessed)} guessed)` : ""}` : `${k.name} (${n(k.guessed)} guessed)`));
+	return [...who, s.unknown ? `${n(s.unknown)} ${s.unknown === 1 ? "line" : "lines"} not placed` : ""].filter(Boolean).join(" · ");
+}
 
 /**
  * A name as a whole-word search. Written with a capital it matches as written ("Rat" is not "rat");
@@ -204,8 +241,9 @@ const byType = (a: CanonNote, b: CanonNote) => {
  * Everything that connects the book to its notes.
  * @param prose each scene's prose by path, for finding names in; a scene without it has no mentions.
  * @param canonical the shown name for an alias ("Effie" is "Eufemie"), from the World note.
+ * @param heard who speaks in each scene, by path, where the scene's speech has been read.
  */
-export function buildRelations(book: Book, allNotes: readonly CanonNote[], prose: ReadonlyMap<string, string>, canonical: (name: string) => string = (n) => n): Relations {
+export function buildRelations(book: Book, allNotes: readonly CanonNote[], prose: ReadonlyMap<string, string>, canonical: (name: string) => string = (n) => n, heard: ReadonlyMap<string, SceneSpeech> = new Map()): Relations {
 	const sceneAt = new Map(book.scenes.map((s, i) => [s.path, i]));
 	const sceneNamed = new Map(book.scenes.map((s) => [fold(s.basename), s]));
 	const inOrder = (a: SceneRecord, b: SceneRecord) => sceneAt.get(a.path)! - sceneAt.get(b.path)!;
@@ -294,7 +332,7 @@ export function buildRelations(book: Book, allNotes: readonly CanonNote[], prose
 	const keyOf = (written: string) => resolve(written)?.path ?? nameKey(canonical(written));
 	const row = (written: string): CastRow => {
 		const key = keyOf(written);
-		if (!rows.has(key)) rows.set(key, { name: canonical(written), note: resolve(written), present: [], mentioned: [], issues: [] });
+		if (!rows.has(key)) rows.set(key, { name: canonical(written), note: resolve(written), present: [], mentioned: [], spoke: [], issues: [] });
 		return rows.get(key)!;
 	};
 	for (const note of notes) if (fold(note.type ?? "") === "character" && note.names.length) row(note.names[0]!);
@@ -314,6 +352,50 @@ export function buildRelations(book: Book, allNotes: readonly CanonNote[], prose
 			for (const scene of listing) for (const name of people(scene)) if (isNamedPerson(name) && !planned.has(keyOf(name))) row(name).issues.push({ kind: "scene-only", scene });
 		}
 	}
+
+	// ── Who speaks ──
+	const speech = new Map<string, SceneSpeakers>();
+	for (const scene of book.scenes) {
+		const said = heard.get(scene.path);
+		if (!said) continue;
+		const listed = new Set(people(scene).map(keyOf));
+		/**
+		 * The row a speaker belongs to. Past the name itself, only someone the scene lists is tried:
+		 * "his mother" for The Mother, and part of a name for the whole ("Madame" for Madame Voss).
+		 */
+		const rowKey = (name: string): string => {
+			const key = keyOf(name);
+			if (rows.has(key)) return key;
+			const plainer = name.replace(/^(?:his|her|their|my|our|your)\s+/i, "");
+			if (plainer !== name && listed.has(keyOf(plainer))) return keyOf(plainer);
+			if (!isNamedPerson(name)) return key;
+			const words = nameKey(name).split(/\s+/);
+			const within = (full: string) => {
+				const all = nameKey(full).split(/\s+/);
+				return all.length > words.length && (words.every((w, i) => all[i] === w) || words.every((w, i) => all[all.length - words.length + i] === w));
+			};
+			const fits = [...listed].filter((k) => [rows.get(k)?.name ?? "", ...(rows.get(k)?.note?.names ?? [])].some(within));
+			return fits.length === 1 ? fits[0]! : key;
+		};
+		const found = new Map<string, SceneSpeaker>();
+		for (const s of said.speakers) {
+			const key = rowKey(s.name);
+			// A tagged name nobody lists is someone: "Chef said". A tagged description ("the guard said") is only a row when a note answers to it.
+			if (!rows.has(key) && s.tagged > 0 && (resolve(s.name) || isNamedPerson(s.name))) row(s.name);
+			const r = rows.get(key);
+			const firm = s.tagged + s.placed;
+			const at = found.get(key) ?? { name: r?.name ?? s.name, note: r?.note ?? null, lines: 0, guessed: 0 };
+			at.lines += firm;
+			at.guessed += s.guessed;
+			found.set(key, at);
+			if (!r) continue;
+			if (firm && !r.spoke.includes(scene)) r.spoke.push(scene);
+			// Held only to a tag or a pin, and only once the scene lists anyone at all.
+			if (s.tagged && listed.size && !listed.has(key) && !r.issues.some((i) => i.kind === "speaks-unlisted" && i.scene === scene)) r.issues.push({ kind: "speaks-unlisted", scene });
+		}
+		speech.set(scene.path, { speakers: [...found.values()], lines: said.lines, unknown: said.unknown });
+	}
+
 	for (const r of rows.values()) {
 		// A name typed into a scene's properties is typed loosely: "Lantern Man" there, "Lantern man" in the prose.
 		const own = r.note ? null : nameMatcher(r.name, /\s/.test(r.name.trim()));
@@ -329,17 +411,17 @@ export function buildRelations(book: Book, allNotes: readonly CanonNote[], prose
 		for (const scene of book.scenes) {
 			const found = named(scene);
 			if (r.present.includes(scene)) {
-				if (found === false && scene.words > 0 && expected && !described.some((d) => d.test(prose.get(scene.path) ?? ""))) r.issues.push({ kind: "unnamed", scene });
+				if (found === false && scene.words > 0 && expected && !r.spoke.includes(scene) && !described.some((d) => d.test(prose.get(scene.path) ?? ""))) r.issues.push({ kind: "unnamed", scene });
 			} else if (found) r.mentioned.push(scene);
 		}
-		const seen = [...r.present, ...r.mentioned].sort(inOrder);
+		const seen = unique([...r.present, ...r.mentioned, ...r.spoke], (s) => s.path).sort(inOrder);
 		r.first = seen[0];
 		r.last = seen[seen.length - 1];
 		r.issues.sort((a, b) => inOrder(a.scene, b.scene));
 	}
-	const cast = [...rows.values()].sort((a, b) => b.present.length - a.present.length || b.mentioned.length - a.mentioned.length || a.name.localeCompare(b.name));
+	const cast = [...rows.values()].sort((a, b) => b.present.length - a.present.length || b.spoke.length - a.spoke.length || b.mentioned.length - a.mentioned.length || a.name.localeCompare(b.name));
 
-	return { notes, reveals, touches, touchedBy, cast, filings, ambiguous, quiet, hasDays: book.scenes.some((s) => Number.isFinite(dayValue(s.day))) };
+	return { notes, reveals, touches, touchedBy, cast, speech, filings, ambiguous, quiet, hasDays: book.scenes.some((s) => Number.isFinite(dayValue(s.day))) };
 }
 
 // ── Order, and what is known when ──────────────────────────────────────────────

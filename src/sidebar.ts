@@ -56,6 +56,12 @@ export interface OutlineStory {
 	/** A scene's beat from the chapter note: null when the chapter has an outline and this scene isn't in it. */
 	beat?: { text: string; card: [string, string][]; target?: number } | null;
 	promises: { role: "Makes" | "Progresses" | "Pays"; name: string; status: PromiseStatus }[];
+	/** Reasons its last pass may no longer hold, each with what to open. */
+	needs?: { text: string; path?: string; line?: number }[];
+	/** Written, and no pass date yet. */
+	noPass?: boolean;
+	/** Who speaks in a scene, and anyone tagged as speaking whom its properties leave out. */
+	speaks?: { text: string; lines: number; unlisted: string[] };
 	/** A chapter note's beats, in outline order, with the scenes attached to each. */
 	beats?: { text: string; target?: number; scenes: OutlineSceneLink[] }[];
 	/** A chapter note's scenes that no beat claims. */
@@ -258,7 +264,7 @@ export class OutlineView extends ItemView {
 		const story = ctx.story;
 		const shown = SCENE_FIELDS.filter(([key]) => present(fm[key]));
 		const summary = present(fm.summary) ? String(fm.summary) : "";
-		const placed = !!story && (story.beat !== undefined || story.promises.length > 0 || !!story.unplanned?.length);
+		const placed = !!story && (story.beat !== undefined || story.promises.length > 0 || !!story.unplanned?.length || !!story.needs?.length || !!story.noPass || !!story.speaks);
 		if (!shown.length && !summary && !placed) return;
 		const body = this.section(root, "scene", story?.kind === "chapter" ? "Chapter" : "Scene");
 		if (summary) body.createDiv({ cls: "pp-outline-summary", text: summary });
@@ -316,6 +322,24 @@ export class OutlineView extends ItemView {
 				chip.setAttribute("aria-label", `${p.name}: ${PROMISE_LABELS[p.status]}`);
 			}
 		}
+		if (story.speaks) {
+			const line = body.createDiv({ cls: "pp-promise-line pp-speaks" });
+			line.createSpan({ cls: "pp-outline-key", text: "Speaks" });
+			line.createSpan({ cls: "pp-speaks-who", text: story.speaks.text });
+			line.setAttribute("aria-label", `${num(story.speaks.lines)} ${story.speaks.lines === 1 ? "line" : "lines"} of speech in this scene, as of its last save. A number is lines that are theirs by a tag, a pinned speaker, an action beat or a settled pronoun; guesses from turn-taking are counted apart. The Dialogue lens shows each line.`);
+			if (story.speaks.unlisted.length) body.createDiv({ cls: "pp-outline-note", text: `Tagged as speaking here, and not in pov or characters: ${story.speaks.unlisted.join(", ")}.` });
+		}
+		if (story.needs?.length) {
+			body.createDiv({ cls: "pp-outline-group", text: "Needs a look" });
+			for (const need of story.needs) {
+				const row = body.createDiv({ cls: "pp-need", text: need.text });
+				const { path, line } = need;
+				if (path) {
+					row.addClass("is-link");
+					row.onclick = (evt) => ctx.onOpenPath(path, Keymap.isModEvent(evt) !== false, line);
+				}
+			}
+		} else if (story.noPass) body.createDiv({ cls: "pp-outline-note", text: "No pass yet: nothing is held against this scene until dev, line or continuity has a date." });
 		if (story.unplanned?.length) {
 			body.createDiv({ cls: "pp-outline-group", text: "Scenes not in the outline" });
 			for (const s of story.unplanned) {

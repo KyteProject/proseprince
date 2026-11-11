@@ -46,8 +46,10 @@ export interface ProsePrinceSettings {
 	sceneTemplate: string;
 	/** Offer the link to the story view at the foot of the outline. */
 	storyLink: boolean;
-	/** Where read-through notes are written. */
+	/** Where read-through notes, the story inventory and compiled manuscripts are written. */
 	readFolder: string;
+	/** The note that holds the shape of the book, by path or name. Empty to use a note called "Shape of the book". */
+	shapeNote: string;
 }
 
 export interface DialogueSettings {
@@ -295,6 +297,7 @@ function defaults(): ProsePrinceSettings {
 		sceneTemplate: SCENE_TEMPLATE_DEFAULT,
 		storyLink: true,
 		readFolder: READ_FOLDER_DEFAULT,
+		shapeNote: "",
 		lookup: { enabled: false, apiKey: "", hoverCards: true, rightClick: true, hideRare: false, history: true },
 	};
 }

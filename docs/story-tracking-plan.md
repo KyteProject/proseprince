@@ -1,6 +1,6 @@
 # Plan: story tracking
 
-Status: phase 1 built in 0.19.0, the read-through from phase 4 in 0.20.0 and phase 2 in 0.21.0 (all 10 November 2026). Phase 3 and the compile are not started. First written 10 November 2026; revised the same day with the author's answers. Background in [feature-map-snowflake-penseed.md](feature-map-snowflake-penseed.md), and in a private note on the author's own vault that is kept out of this repository.
+Status: phase 1 built in 0.19.0, the read-through from phase 4 in 0.20.0, phase 2 in 0.21.0 and phase 3 in 0.22.0 (all 10 November 2026), and who speaks, for the Cast, in 0.23.0 and the compile in 0.24.0 (both 11 November 2026). Every phase is built. First written 10 November 2026; revised the same day with the author's answers. Background in [feature-map-snowflake-penseed.md](feature-map-snowflake-penseed.md), and in a private note on the author's own vault that is kept out of this repository.
 
 ## Goal
 
@@ -111,10 +111,10 @@ Each phase is a build and a minor version; fixes are patches.
 - A fact is any line ending `([[scene]])`, under any heading, since the vault keeps cited lines in a note's decided body as well as under `## Added`.
 - A filed comment names a note, not a line, so the two sides can't be matched fact by fact. The check is per note: a scene with a filed comment for a note that never cites that scene is flagged, with the scene of the same chapter the note cites instead.
 - Mention matching has one rule and no marking: a name with a capital matches as written, one all in lower case matches any case, a leading article is ignored. World note entries are used to group aliases of one person, not as mentions.
-- Cast mismatches come from the plan, the properties and the prose only: in a beat's `who:` but not the scene's `characters`, the reverse, and listed but never named (names only, not descriptions; and for someone with both, "the inspector" in the prose is enough, in any case). **Who speaks is not in the Cast yet**: attribution runs in the editor under the Dialogue lens, one note at a time, and the outline's Beats section already checks `who:` against speakers there. Carrying it into the Cast means running attribution over every scene, which is its own piece of work.
+- Cast mismatches come from the plan, the properties and the prose only: in a beat's `who:` but not the scene's `characters`, the reverse, and listed but never named (names only, not descriptions; and for someone with both, "the inspector" in the prose is enough, in any case). **Who speaks** came later, in 0.23.0: every scene is read with the Dialogue lens's own paragraphs, names and rules (in the worker, when the scene is saved, sharing the editor's cache), so the Cast and the lens agree. A row lists the scenes someone speaks in, counting lines that are theirs by a tag, a pin, a beat or a settled pronoun and never a turn-taking guess. The one new mismatch is "tagged as speaking in a scene whose `pov` and `characters` list others and not them"; in a scene and silent is shown on hover and is not a mismatch. A tagged name nobody lists gets a row; a tagged description gets one only when a note answers to it. Part of a name ("Madame" for a listed Madame Voss) and a possessive ("his father" for a listed The Father) are joined only to someone that scene lists. Not joined: a singular for a listed group ("the guard" for "Two guards").
 - The note side of Touches is in the outline: open a note about the story and it lists its scenes. The Story view shows a scene's declared and recorded notes on hover, and lists notes the prose names in two scenes or more with nothing recorded under Reveals, by note.
 
-### Phase 3 (0.22): needs a look, inventory
+### Phase 3 (built, 0.22.0): needs a look, inventory
 
 **Needs a look** in the Story view, and the same reasons on the Scene section. One line per reason, with the two dates behind it:
 - canon changed since the continuity pass, in a note the scene touches;
@@ -129,11 +129,28 @@ A scene with no pass flags reads "no pass yet", never stale. When a pass flag's 
 
 **Tests**: each reason from invented dates; the threshold; inventory output for the invented book.
 
-### Phase 4: read-through (built, 0.20.0) and compile (0.23)
+**As built**, where it differs from the above:
+- The threshold is counted in words: ten words (about fifty characters) and one in a hundred. What is kept per scene is a tally of its words, each reduced to three characters, so "how much changed" is a count of words added or taken out, whichever is more, and no prose is stored. A reordered scene with the same words counts as unchanged.
+- It is kept in `story-tracking.json` beside the plugin's settings, not in the settings file, which stays small.
+- A pass's prose is kept when the date is typed in front of ProsePrince with the prose standing still, or when the file hasn't been saved since the day of the pass. Otherwise the file date is the fallback, and the line says so. Each scene also carries the date of its last real change (small edits add up against the threshold), which is what "an earlier scene was edited" compares; on the day of a pass, the time of day settles it when both were seen.
+- "Canon changed" uses `## Added` dates first, leaving out facts that cite the scene itself, and falls back on the note's body having changed (its frontmatter aside). Only the `continuity` date is compared; the earlier-scene reason uses the later of `dev` and `continuity`; "edited" uses the latest of all three.
+- The shape note is found by name ("Shape of the book", number and "The" aside) or set in settings. A chapter's card is the chapter note's `%%Card.%%`; cards still sitting in scene files are not compared.
+- The inventory uses wiki links for scenes and notes, so file names are exact. It lists what is left to clear per chapter and per scene.
+
+### Phase 4: read-through (built, 0.20.0) and compile (built, 0.24.0)
 
 **Read-through** commands, built: *Read through this chapter* and *Read through the book* write `_proseprince/Read 04 The Job.md` or `_proseprince/Read the book.md`, a list of scene embeds in reading order under chapter titles, with a style class that hides callouts and embed title bars, and open it in reading view. Scenes with no words are left out. It holds no copy of the prose, so it is always current; the note is rewritten only when its list of scenes changes. Still to prove in the vault: how embeds render with the theme in use.
 
 **Compile** command: one clean Markdown note for a chapter or the book. Scenes in order through the same rule the word counts use (no frontmatter, comments, callouts or plan headings), chapter titles, a scene break between scenes, highlights, `@@` and fix-later checkboxes stripped. Before writing, a short report of what is still in the way: unfiled notes, open questions, placeholders in the prose. Regenerated each time, never edited by hand.
+
+**As built.**
+
+- Commands *Compile this chapter* and *Compile the book*, and a button in the Story view, write `Manuscript 04 The Job.md` or `Manuscript.md` in the output folder and open it in reading view.
+- A chapter is headed "Chapter 4: The Job", or "Chapter 4" with no chapter note. Scenes are divided by `***`. A scene's own title and beat headings are plan, and are left out.
+- A scene's prose is the lines the word count counts, less fix-later lines (ticked or not), so the manuscript's words equal the book's wherever a scene has no such line. Comments go with the space before them, including one that runs over a line break inside a paragraph; highlight and `@@` marks come off and their words stay; links read as their text; embeds and tags go, though "#4" is a number and stays. A break at the head or foot of a scene, or one straight after another, is dropped.
+- A `[placeholder]` is left exactly as written: taking it out would be rewording.
+- The report is a dialog listing, per scene, every kind of annotation still to clear (notes to file, questions, todos, claims to check, fix-later boxes, stumbles, placeholders), each row opening its scene. It never blocks: *Compile as it stands* writes the note. With nothing to report, the note is written straight away.
+- The note carries `proseprince: false`, when it was written and its word count in its properties, and no comment in the page, since an export would carry a comment along.
 
 **Not built**: export to Word, EPUB or PDF. The compiled note goes to Pandoc or Obsidian's PDF export when that day comes.
 
@@ -142,6 +159,7 @@ A scene with no pass flags reads "no pass yet", never stale. When a pass flag's 
 - The prose folders already define the book.
 - One toggle to hide the Story view's link in the outline, for vaults that are not a book.
 - Output folder for the inventory and manuscript notes, default `_proseprince`.
+- The shape note, by name or path. Empty looks for a note called "Shape of the book".
 
 ## Not in this plan
 

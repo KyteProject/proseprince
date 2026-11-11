@@ -1,42 +1,34 @@
 import { ItemView, Keymap, type WorkspaceLeaf } from "obsidian";
-import { type CanonNote, type CastIssueKind, type CastRow, type Filing, type Relations, type Reveal, revealsUpTo, sceneOrder, type Touch } from "./analysis/relations";
-import { ANNOTATION_KINDS, type AnnotationKind, type Book, type BookBeat, type BookChapter, type PromiseRef, type PromiseRow, type PromiseStatus, sceneLabel, scenePromises, type SceneRecord, toClear } from "./analysis/story";
+import type { Needs } from "./analysis/needs";
+import { type CanonNote, type CastIssueKind, type CastRow, type Filing, type Relations, type Reveal, revealsUpTo, sceneOrder, speechLabel, type Touch, touchLabel } from "./analysis/relations";
+import { ANNOTATION_KINDS, ANNOTATION_LABELS, type Book, type BookBeat, type BookChapter, type PromiseRef, type PromiseRow, PROMISE_LABELS, sceneLabel, scenePromises, type SceneRecord, toClear } from "./analysis/story";
+
+export { ANNOTATION_LABELS, PROMISE_LABELS, touchLabel };
 
 export const STORY_VIEW = "proseprince-story";
 
 export interface StoryContext {
 	book: Book;
 	relations: Relations;
+	needs: Needs;
+	/** Write the story inventory. */
+	onInventory(): void;
 	/** The note being edited, so its row can be marked. */
 	current: string | null;
 	/** Open a note, at a line (from 0) when one is given. */
 	onOpen(path: string, newTab: boolean, line?: number): void;
 	/** Open a read-through: of one chapter, or of the whole book when no chapter is given. */
 	onRead(chapter?: number): void;
+	/** Compile the whole book into one clean note for export. */
+	onCompile(): void;
 }
 
 const num = (x: number) => x.toLocaleString();
 const pad = (n: number) => String(n).padStart(2, "0");
 
-export const ANNOTATION_LABELS: Record<AnnotationKind, [one: string, many: string]> = {
-	note: ["note to file", "notes to file"],
-	question: ["question", "questions"],
-	todo: ["todo", "todos"],
-	check: ["claim to check", "claims to check"],
-	fix: ["fix-later box", "fix-later boxes"],
-	stumble: ["stumble", "stumbles"],
-	placeholder: ["placeholder", "placeholders"],
-	filed: ["filed", "filed"],
-	checked: ["checked", "checked"],
-};
 
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
-/** How a scene and a note are connected, in a few words: "pov · 2 facts · named". */
-export function touchLabel(t: Touch): string {
-	const declared = t.declared.map((d) => (d === "beat" ? "in the beat" : d === "character" ? "in the scene" : d));
-	return [...declared, t.facts ? plural(t.facts, "fact") : "", !t.facts && t.filed ? `${num(t.filed)} filed` : "", t.mentions.length ? "named" : ""].filter(Boolean).join(" · ");
-}
 
 /** The same, spelt out for a tooltip. */
 export function touchDetail(t: Touch): string {
@@ -54,15 +46,9 @@ const CAST_ISSUES: Record<CastIssueKind, (scene: string) => string> = {
 	unnamed: (scene) => `Listed in ${scene}, but its prose never names them`,
 	"beat-only": (scene) => `In the beat's who: for ${scene}, but not in the scene's characters`,
 	"scene-only": (scene) => `In the characters of ${scene}, but not in its beat's who:`,
+	"speaks-unlisted": (scene) => `Speaks in ${scene}, but isn't in its pov or characters`,
 };
 
-export const PROMISE_LABELS: Record<PromiseStatus, string> = {
-	open: "open",
-	progressing: "progressing",
-	paid: "paid",
-	"paid-before-made": "paid before it was made",
-	"never-made": "never made",
-};
 
 /**
  * The ProsePrince story view: the book in reading order (chapters, their beats, their scenes) and
@@ -123,6 +109,9 @@ export class StoryView extends ItemView {
 		const read = root.createEl("button", { cls: "pp-outline-button pp-story-read-book", text: "Read the book…" });
 		read.setAttribute("aria-label", "Every written scene, in order, as one page. Nothing is copied: the page embeds the scenes.");
 		read.onclick = () => this.ctx?.onRead();
+		const compile = root.createEl("button", { cls: "pp-outline-button pp-story-read-book", text: "Compile the book…" });
+		compile.setAttribute("aria-label", "Every written scene, in order, copied into one clean note for export: no properties, comments, callouts or headings. What the scenes still carry is shown first. Replaced whole each time. \"Compile this chapter\" is in the command palette.");
+		compile.onclick = () => this.ctx?.onCompile();
 		this.bookSection(root, book);
 		this.promiseSection(root, book);
 		const relations = this.ctx?.relations;
@@ -130,6 +119,7 @@ export class StoryView extends ItemView {
 			this.revealSection(root, book, relations);
 			this.castSection(root, relations);
 		}
+		if (this.ctx?.needs) this.needsSection(root, this.ctx.needs);
 		this.setCurrent(this.ctx?.current ?? null);
 		root.scrollTop = scroll;
 	}
@@ -225,12 +215,14 @@ export class StoryView extends ItemView {
 		const pass = (label: string, date?: string) => `${label} ${date ?? "not yet"}`;
 		// Named in the prose alone is too loose to list here: the outline has the full picture.
 		const touched = (this.ctx?.relations.touches.get(s.path) ?? []).filter((t) => t.declared.length || t.facts || t.filed);
+		const heard = this.ctx?.relations.speech.get(s.path);
 		row.setAttribute("aria-label", [
 			s.summary,
 			[s.pov ? `POV ${s.pov}` : "", s.characters.length ? `with ${s.characters.join(", ")}` : "", s.setting ?? "", s.day ? `day ${s.day}` : ""].filter(Boolean).join(" · "),
 			`Passes: ${pass("dev", s.flags.dev)} · ${pass("line", s.flags.line)} · ${pass("continuity", s.flags.continuity)}`,
 			notes.length ? `In the scene: ${notes.join(", ")}` : "",
 			touched.length ? `Touches: ${touched.map((t) => t.note.title).join(", ")}` : "",
+			heard?.lines ? `Speaks: ${speechLabel(heard)}` : "",
 			...(["Makes", "Progresses", "Pays"] as const).map((role) => {
 				const names = promises.filter((p) => p.role === role).map((p) => `${p.name} (${PROMISE_LABELS[p.status]})`);
 				return names.length ? `${role}: ${names.join(", ")}` : "";
@@ -410,26 +402,55 @@ export class StoryView extends ItemView {
 
 	// ── Cast ─────────────────────────────────────────────────────────────────────
 
+	// ── Needs a look ────────────────────────────────────────────────────
+
+	private needsSection(root: HTMLElement, needs: Needs): void {
+		const { body } = this.section(root, "needs", `Needs a look (${num(needs.byScene.size)})`);
+		for (const [path, list] of needs.byScene) {
+			const row = body.createDiv({ cls: "pp-story-row pp-need-scene" });
+			const head = row.createDiv({ cls: "pp-beat-head" });
+			head.createSpan({ cls: "pp-story-name", text: sceneLabel(list[0]!.scene) });
+			head.createSpan({ cls: "pp-beat-words", text: plural(list.length, "reason") });
+			this.linkTo(head, path);
+			for (const need of list) {
+				const line = row.createDiv({ cls: "pp-need", text: need.text });
+				if (need.cause) this.linkTo(line, need.cause.path, need.cause.line);
+			}
+		}
+		const none = needs.noPass.length;
+		const note = !needs.passed
+			? "Nothing can be said yet: no scene has a pass date. Once a scene's dev, line or continuity has a date, it is listed here when something it leans on changes after it."
+			: `${needs.byScene.size ? "" : "Nothing against any scene with a pass. "}${none ? `${plural(none, "written scene")} ${none === 1 ? "has" : "have"} had no pass yet, so nothing is held against ${none === 1 ? "it" : "them"}. ` : ""}Each line is a reason to look, with the dates behind it, and never more than that. "File date" means the change wasn't seen happening, so the file's own date stands in.`;
+		body.createDiv({ cls: "pp-outline-note", text: note });
+		const write = body.createEl("button", { cls: "pp-outline-button", text: "Write inventory…" });
+		write.setAttribute("aria-label", "Writes Inventory in your read-through folder: open promises, these reasons, what is left to clear in each chapter, and the reading list for the scene that is open. Replaced whole each time.");
+		write.onclick = () => this.ctx?.onInventory();
+	}
+
 	private castSection(root: HTMLElement, relations: Relations): void {
 		if (!relations.cast.length) return;
 		const disagreements = relations.cast.reduce((n, r) => n + r.issues.length, 0);
 		const { body } = this.section(root, "cast", `Cast (${num(relations.cast.length)}${disagreements ? `, ${plural(disagreements, "thing")} to check` : ""})`);
 		for (const r of relations.cast) this.castRow(body, r);
-		body.createDiv({ cls: "pp-outline-note", text: "In: named in a scene's pov or characters. Named: in its prose only. A row is here because a scene or a beat lists the name, or a character note carries it. Who speaks is checked note by note, in the outline under the Dialogue lens." });
+		body.createDiv({ cls: "pp-outline-note", text: "In: named in a scene's pov or characters. Speaks: a line of speech there is theirs by a tag (\"Mara said\"), a pinned speaker, an action beat or a pronoun the scene settles; a guess from turn-taking never counts. Named: in its prose only. A row is here because a scene or a beat lists the name, a character note carries it, or a tag names them." });
 	}
 
 	private castRow(body: HTMLElement, r: CastRow): void {
-		const row = body.createDiv({ cls: `pp-story-row pp-cast${r.present.length || r.mentioned.length ? "" : " is-absent"}` });
+		const row = body.createDiv({ cls: `pp-story-row pp-cast${r.present.length || r.mentioned.length || r.spoke.length ? "" : " is-absent"}` });
 		const head = row.createDiv({ cls: "pp-beat-head" });
 		head.createSpan({ cls: "pp-story-name", text: r.name });
 		if (r.note) this.status(head, r.note);
-		const counts = [r.present.length ? `in ${num(r.present.length)}` : "", r.mentioned.length ? `named in ${num(r.mentioned.length)}` : ""].filter(Boolean).join(" · ");
+		const counts = [r.present.length ? `in ${num(r.present.length)}` : "", r.spoke.length ? `speaks in ${num(r.spoke.length)}` : "", r.mentioned.length ? `named in ${num(r.mentioned.length)}` : ""].filter(Boolean).join(" · ");
+		// In a scene whose speech was read, with no line found to be theirs.
+		const silent = r.present.filter((s) => this.ctx?.relations.speech.has(s.path) && !r.spoke.includes(s));
 		head.createSpan({ cls: "pp-beat-words", text: counts || "not in a scene yet" });
 		const number = (s: SceneRecord) => `${pad(s.name.chapter)}.${pad(s.name.scene)}`;
 		row.setAttribute("aria-label", [
 			r.note ? `Character note: ${r.note.basename}` : "No character note carries this name. If one should, add the name to its aliases.",
 			r.first && r.last ? (r.first === r.last ? `Only in ${sceneLabel(r.first)}` : `First in ${sceneLabel(r.first)}, last in ${sceneLabel(r.last)}`) : "",
 			r.present.length ? `In: ${r.present.map(number).join(", ")}` : "",
+			r.spoke.length ? `Speaks in: ${r.spoke.map(number).join(", ")}` : "",
+			silent.length ? `In, with no line found to be theirs: ${silent.map(number).join(", ")}` : "",
 			r.mentioned.length ? `Named only: ${r.mentioned.map(number).join(", ")}` : "",
 		].filter(Boolean).join("\n"));
 		if (r.note) this.linkTo(row, r.note.path);

@@ -11,15 +11,20 @@ import { openLookupPopover } from "./lookup/popover";
 import { LookupService } from "./lookup/service";
 import { type HintResult, type PairingResult, suggestForHint, usualPairings } from "./lookup/suggest";
 import type { LookupHint, Pairing } from "./analysis/types";
+import type { DialogueLine } from "./analysis/dialogue/speech";
+import { type SceneSpeech, sceneSpeech, speechParagraphs } from "./analysis/dialogue/scene";
 import { excludedBlocks } from "./analysis/mask";
 import { beatAt, beatNotes, beatsOf, headingsIn } from "./analysis/outline";
-import { sceneKnowledge, type Reveal } from "./analysis/relations";
+import { sceneKnowledge, speechLabel, type Reveal } from "./analysis/relations";
+import { compile } from "./analysis/compile";
+import { INVENTORY_NAME, inventory } from "./analysis/inventory";
 import { fillSceneTemplate, nextSceneNumber, parseSceneName, readThrough, SCENE_TEMPLATE, sceneFileName, sceneLabel, scenePromises, type SceneRecord } from "./analysis/story";
 import { ProsePrinceSettingTab } from "./settings";
 import type { OutlineReport } from "./editor/highlighter";
 import { OUTLINE_VIEW, type OutlineFact, type OutlineStory, OutlineView } from "./sidebar";
 import { StoryIndex } from "./story";
 import { STORY_VIEW, StoryView, touchDetail, touchLabel } from "./storyView";
+import { CompileModal } from "./compileModal";
 import { VoicesModal } from "./voicesModal";
 import {
 	activeLenses,
@@ -39,6 +44,9 @@ import {
 import { AnalysisClient } from "./worker/client";
 import { WorldIndex, type WorldSection } from "./world";
 
+/** Where the prints and dates behind "Needs a look" are kept, beside the plugin's settings. */
+const STORY_TRACKING_FILE = "story-tracking.json";
+
 export default class ProsePrincePlugin extends Plugin {
 	settings: ProsePrinceSettings = structuredClone(DEFAULT_SETTINGS);
 	client = new AnalysisClient();
@@ -53,6 +61,7 @@ export default class ProsePrincePlugin extends Plugin {
 	/** What the status-bar items currently show, so unchanged content isn't redrawn. */
 	private lensShown = "";
 	private readabilityShown = "";
+	private unloaded = false;
 	world = new WorldIndex(this.app, () => this.settings);
 	private rebuildWorld = debounce(async () => {
 		if (!(await this.world.rebuild())) return;
@@ -75,7 +84,10 @@ export default class ProsePrincePlugin extends Plugin {
 	});
 	lookupHistory = new LookupHistory(() => this.saveLookupHistory());
 	/** The book: chapter notes and scenes in the prose folders, re-read when one of them changes. */
-	story = new StoryIndex(this.app, () => this.settings.folders, (name) => this.canonicalSpeaker(name));
+	story = new StoryIndex(this.app, () => this.settings.folders, (name) => this.canonicalSpeaker(name), () => this.settings.shapeNote, () => this.saveStoryTracking(), {
+		key: () => `${[...this.world.properNouns].join("\u0001")}\u0000${[...this.world.speakers].join("\u0001")}`,
+		of: (text) => this.speechOf(text),
+	});
 	private rebuildStory = debounce(async () => {
 		if (!(await this.story.rebuild())) return;
 		this.renderStory();
@@ -88,11 +100,18 @@ export default class ProsePrincePlugin extends Plugin {
 	private refreshOutline = debounce(() => void this.updateOutline(), 400, true);
 	private saveLookupCache = debounce(() => void this.writePluginFile("lookup-cache.json", this.lookups.serialize()), 30_000, true);
 	private saveLookupHistory = debounce(() => void this.writePluginFile("lookup-history.json", this.lookupHistory.serialize()), 5_000, true);
+	/** Prints and dates behind "Needs a look". Not held back to the first rebuild: nothing is saved until it has been read. */
+	private saveStoryTracking = debounce(() => {
+		if (this.storyTrackingRead) void this.writePluginFile(STORY_TRACKING_FILE, this.story.serialize());
+	}, 10_000, true);
+	private storyTrackingRead = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.lookups.restore(await this.readPluginFile("lookup-cache.json"));
 		this.lookupHistory.restore(await this.readPluginFile("lookup-history.json"));
+		this.story.restore(await this.readPluginFile(STORY_TRACKING_FILE));
+		this.storyTrackingRead = true;
 		const { extension, plugin } = createHighlighter(this);
 		this.runner = plugin;
 		this.registerEditorExtension(extension);
@@ -137,7 +156,9 @@ export default class ProsePrincePlugin extends Plugin {
 			if (this.story.knows(file.path)) void this.rebuildStory();
 		}));
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-			if (file instanceof TFile && (this.story.knows(oldPath) || this.story.isRelevant(file) || this.story.isCanon(file))) void this.rebuildStory();
+			if (!(file instanceof TFile)) return;
+			this.story.renamed(oldPath, file.path);
+			if (this.story.knows(oldPath) || this.story.isRelevant(file) || this.story.isCanon(file)) void this.rebuildStory();
 		}));
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
 			const path = this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path;
@@ -155,6 +176,19 @@ export default class ProsePrincePlugin extends Plugin {
 			},
 		});
 		this.addCommand({ id: "read-book", name: "Read through the book", callback: () => void this.openReadThrough() });
+		this.addCommand({ id: "write-inventory", name: "Write story inventory", callback: () => void this.writeInventory() });
+		this.addCommand({
+			id: "compile-chapter",
+			name: "Compile this chapter",
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				const record = file ? this.story.record(file.path) : undefined;
+				if (!record) return false;
+				if (!checking) void this.compileManuscript(record.name.chapter);
+				return true;
+			},
+		});
+		this.addCommand({ id: "compile-book", name: "Compile the book", callback: () => void this.compileManuscript() });
 		this.addCommand({
 			id: "create-scene-from-beat",
 			name: "Create scene from beat",
@@ -350,6 +384,44 @@ export default class ProsePrincePlugin extends Plugin {
 		new Notice(`ProsePrince ${on ? "on" : "off"} for ${file.basename}`);
 	}
 
+	/**
+	 * Who speaks in a scene, from its whole text: the Dialogue lens's reading, without the note being
+	 * open. Paragraphs are analysed in the worker and share the editor's cache, so opening the scene
+	 * afterwards costs nothing more.
+	 */
+	private async speechOf(raw: string): Promise<SceneSpeech | null> {
+		// Once unloaded, asking the worker anything would start it again.
+		if (this.unloaded) return null;
+		const text = raw.replace(/\r\n?/g, "\n");
+		const paragraphs = speechParagraphs(text, this.castNames());
+		const echo = this.settings.echoWindow;
+		const keyOf = (p: { text: string; names: string[] }) => ResultCache.key(p.text, echo, p.names);
+		// Kept here as well: the cache may let an early paragraph go before a long scene is done.
+		const lines = new Map<string, DialogueLine[]>();
+		const missing: typeof paragraphs = [];
+		for (const p of paragraphs) {
+			const key = keyOf(p);
+			const cached = this.cache.get(key);
+			if (cached) lines.set(key, cached.dialogue);
+			else if (!lines.has(key)) {
+				lines.set(key, []);
+				missing.push(p);
+			}
+		}
+		const BATCH = 40;
+		for (let i = 0; i < missing.length; i += BATCH) {
+			if (this.unloaded) return null;
+			const batch = missing.slice(i, i + BATCH);
+			const results = await this.client.analyze(batch.map((p) => ({ text: p.text, names: p.names })), echo);
+			if (results.length !== batch.length) return null;
+			results.forEach((result, k) => {
+				this.cache.set(keyOf(batch[k]!), result);
+				lines.set(keyOf(batch[k]!), result.dialogue);
+			});
+		}
+		return sceneSpeech(text, paragraphs, paragraphs.map((p) => lines.get(keyOf(p))), (name) => this.canonicalSpeaker(name));
+	}
+
 	canonicalSpeaker(name: string): string {
 		return this.world.speakers.get(name.toLowerCase()) ?? name;
 	}
@@ -505,8 +577,10 @@ export default class ProsePrincePlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.unloaded = true;
 		this.saveLookupCache.run();
 		this.saveLookupHistory.run();
+		this.saveStoryTracking.run();
 		this.client.dispose();
 		this.cache.clear();
 	}
@@ -580,6 +654,41 @@ export default class ProsePrincePlugin extends Plugin {
 	}
 
 	/**
+	 * Write the story inventory: the book's open ends as one note, for a reader (a person or an
+	 * assistant) that would otherwise scan the vault for them. It is replaced whole each time. The scene that
+	 * was open gets its reading list.
+	 */
+	private async writeInventory(): Promise<void> {
+		await this.story.rebuild();
+		if (!this.story.book.scenes.length) {
+			new Notice("ProsePrince: no scenes found, so there is nothing to take stock of yet.");
+			return;
+		}
+		const open = (this.outlineSource?.file ?? this.app.workspace.getActiveFile())?.path ?? null;
+		const now = new Date();
+		const two = (n: number) => String(n).padStart(2, "0");
+		const written = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())} ${two(now.getHours())}:${two(now.getMinutes())}`;
+		const text = inventory({ book: this.story.book, relations: this.story.relations, needs: this.story.needs, written, open, canonical: (name) => this.canonicalSpeaker(name) });
+		const folder = normalizePath(this.settings.readFolder.trim() || "_proseprince");
+		const path = normalizePath(`${folder}/${INVENTORY_NAME}.md`);
+		try {
+			if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
+			const file = this.app.vault.getAbstractFileByPath(path);
+			if (file instanceof TFile) await this.app.vault.modify(file, text);
+			else if (file) {
+				new Notice(`ProsePrince: ${path} is a folder, so the inventory can't be written there.`);
+				return;
+			} else await this.app.vault.create(path, text);
+		} catch (error) {
+			console.error("ProsePrince: could not write the inventory", error);
+			new Notice(`ProsePrince: couldn't write ${path}. See the console for why.`);
+			return;
+		}
+		const scene = open ? this.story.record(open) : undefined;
+		new Notice(`ProsePrince: inventory written to ${path}${scene?.kind === "scene" ? `, with the reading list for ${sceneLabel(scene)}` : ""}.`);
+	}
+
+	/**
 	 * Write the read-through note for a chapter (or the whole book) and open it in reading view. The note
 	 * only embeds the scenes, so it is rewritten whenever its list of scenes would differ, and never otherwise.
 	 */
@@ -611,6 +720,60 @@ export default class ProsePrincePlugin extends Plugin {
 		this.app.workspace.setActiveLeaf(open, { focus: true });
 	}
 
+	/**
+	 * Compile a chapter (or the whole book) into one clean note for export, and open it. When the scenes
+	 * still carry notes, questions or placeholders, they are shown first; the manuscript can be written
+	 * all the same. The note is replaced whole each time.
+	 */
+	private async compileManuscript(chapter?: number): Promise<void> {
+		await this.story.rebuild();
+		const texts = new Map<string, string>();
+		for (const c of this.story.book.chapters) {
+			if (chapter !== undefined && c.number !== chapter) continue;
+			for (const scene of c.scenes) {
+				const file = scene.words > 0 ? this.app.vault.getAbstractFileByPath(scene.path) : null;
+				if (file instanceof TFile) texts.set(scene.path, await this.app.vault.cachedRead(file));
+			}
+		}
+		const now = new Date();
+		const two = (n: number) => String(n).padStart(2, "0");
+		const written = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())} ${two(now.getHours())}:${two(now.getMinutes())}`;
+		const page = compile(this.story.book, texts, { chapter, written });
+		if (!page) {
+			new Notice(chapter === undefined ? "ProsePrince: no written scenes found to compile." : "ProsePrince: nothing is written in this chapter yet.");
+			return;
+		}
+		const folder = normalizePath(this.settings.readFolder.trim() || "_proseprince");
+		const path = normalizePath(`${folder}/${page.name}.md`);
+		const write = async () => {
+			let file = this.app.vault.getAbstractFileByPath(path);
+			try {
+				if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
+				if (file instanceof TFile) await this.app.vault.modify(file, page.text);
+				else if (file) {
+					new Notice(`ProsePrince: ${path} is a folder, so the manuscript can't be written there.`);
+					return;
+				} else file = await this.app.vault.create(path, page.text);
+			} catch (error) {
+				console.error("ProsePrince: could not write the manuscript", error);
+				new Notice(`ProsePrince: couldn't write ${path}. See the console for why.`);
+				return;
+			}
+			const target = file as TFile;
+			// Reuse the tab if this manuscript is already open.
+			let leaf: WorkspaceLeaf | null = null;
+			this.app.workspace.iterateAllLeaves((l) => {
+				if (!leaf && l.view instanceof MarkdownView && l.view.file?.path === target.path) leaf = l;
+			});
+			const open = leaf ?? this.app.workspace.getLeaf("tab");
+			await open.openFile(target, { state: { mode: "preview" } });
+			this.app.workspace.setActiveLeaf(open, { focus: true });
+			new Notice(`ProsePrince: ${page.name} written to ${path}: ${page.words.toLocaleString()} words, ${page.scenes.toLocaleString()} ${page.scenes === 1 ? "scene" : "scenes"}.`);
+		};
+		if (page.inTheWay.length) new CompileModal(this.app, page, path, () => void write(), (scene, newTab) => void this.openPath(scene, newTab)).open();
+		else await write();
+	}
+
 	/** Open the story view in the right sidebar (or reveal it if it's already there). */
 	private async openStory(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(STORY_VIEW)[0];
@@ -628,7 +791,7 @@ export default class ProsePrincePlugin extends Plugin {
 
 	private renderStory(): void {
 		const current = (this.outlineSource?.file ?? this.app.workspace.getActiveFile())?.path ?? null;
-		for (const v of this.storyViews()) v.show({ book: this.story.book, relations: this.story.relations, current, onOpen: (path, newTab, line) => void this.openPath(path, newTab, line), onRead: (chapter) => void this.openReadThrough(chapter) });
+		for (const v of this.storyViews()) v.show({ book: this.story.book, relations: this.story.relations, needs: this.story.needs, current, onOpen: (path, newTab, line) => void this.openPath(path, newTab, line), onRead: (chapter) => void this.openReadThrough(chapter), onInventory: () => void this.writeInventory(), onCompile: () => void this.compileManuscript() });
 	}
 
 	/** Open a note from a sidebar: in the editor last used, or a new tab with Ctrl/Cmd-click. At a line (from 0), when given. */
@@ -660,12 +823,18 @@ export default class ProsePrincePlugin extends Plugin {
 		}
 		const book = this.story.book;
 		const promises = scenePromises(book, record);
+		const needs = (this.story.needs.byScene.get(record.path) ?? []).map((n) => ({ text: n.text, ...(n.cause ? { path: n.cause.path, ...(n.cause.line === undefined ? {} : { line: n.cause.line }) } : {}) }));
+		const look = { ...(needs.length ? { needs } : {}), ...(this.story.needs.noPass.some((s) => s.path === record.path) ? { noPass: true } : {}) };
+		const heard = relations.speech.get(record.path);
+		const unlisted = relations.cast.filter((r) => r.issues.some((i) => i.kind === "speaks-unlisted" && i.scene.path === record.path)).map((r) => r.name);
+		const speaks = heard?.lines ? { speaks: { text: speechLabel(heard), lines: heard.lines, unlisted } } : {};
 		const link = (s: SceneRecord) => ({ path: s.path, label: sceneLabel(s), words: s.words });
 		if (record.kind === "chapter") {
 			const chapter = book.chapters.find((c) => c.note?.path === record.path);
 			return {
 				kind: "chapter",
 				promises,
+				...look,
 				beats: (chapter?.beats ?? []).map((b) => ({ text: b.text, target: b.target, scenes: b.scenes.map(link) })),
 				unplanned: (chapter?.unplanned ?? []).map(link),
 			};
@@ -677,6 +846,8 @@ export default class ProsePrincePlugin extends Plugin {
 		return {
 			kind: "scene",
 			promises,
+			...look,
+			...speaks,
 			touches: (relations.touches.get(record.path) ?? []).map((t) => ({
 				path: t.note.path, label: t.note.title, group: t.note.type, status: t.note.status,
 				how: touchLabel(t), detail: `${t.note.basename}\n${touchDetail(t)}`,

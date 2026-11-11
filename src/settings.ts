@@ -384,10 +384,17 @@ export class ProsePrinceSettingTab extends PluginSettingTab {
 				await save();
 			}));
 		new Setting(containerEl)
-			.setName("Read-through folder")
-			.setDesc("Where \"Read through this chapter\" and \"Read through the book\" write their note. The note only embeds your scenes, in order, so it holds no copy of your prose and is rewritten each time you run the command.")
+			.setName("Read-through, inventory and manuscript folder")
+			.setDesc("Where \"Read through this chapter\" and \"Read through the book\" write their note, \"Write story inventory\" writes Inventory, and \"Compile this chapter\" and \"Compile the book\" write Manuscript. A read-through only embeds your scenes, in order, so it holds no copy of your prose; a manuscript is a clean copy for export. All of them are rewritten each time you run the command, so nothing typed into them is kept.")
 			.addText((t) => t.setPlaceholder(READ_FOLDER_DEFAULT).setValue(s.readFolder).onChange(async (v) => {
 				s.readFolder = v.trim();
+				await save();
+			}));
+		new Setting(containerEl)
+			.setName("Shape note")
+			.setDesc("The note that says what the book is, by name or path. When it changes, each chapter outline whose card is older is listed under Needs a look. Leave empty to use a note called \"Shape of the book\", if there is one.")
+			.addText((t) => t.setPlaceholder("Shape of the book").setValue(s.shapeNote).onChange(async (v) => {
+				s.shapeNote = v.trim();
 				await save();
 			}));
 		new Setting(containerEl)

@@ -103,6 +103,19 @@ export function countAnnotations(list: readonly Annotation[]): Record<Annotation
 
 export const toClear = (counts: Record<AnnotationKind, number>) => TO_CLEAR.reduce((n, k) => n + counts[k], 0);
 
+/** What each kind of annotation is called, one and many. */
+export const ANNOTATION_LABELS: Record<AnnotationKind, [one: string, many: string]> = {
+	note: ["note to file", "notes to file"],
+	question: ["question", "questions"],
+	todo: ["todo", "todos"],
+	check: ["claim to check", "claims to check"],
+	fix: ["fix-later box", "fix-later boxes"],
+	stumble: ["stumble", "stumbles"],
+	placeholder: ["placeholder", "placeholders"],
+	filed: ["filed", "filed"],
+	checked: ["checked", "checked"],
+};
+
 // ── Frontmatter ────────────────────────────────────────────────────────────────
 
 /** A frontmatter list as clean strings: an empty `- ` entry, `[[links]]` and blanks all fall away. */
@@ -291,6 +304,14 @@ export interface BookChapter {
 }
 
 export type PromiseStatus = "open" | "progressing" | "paid" | "paid-before-made" | "never-made";
+
+export const PROMISE_LABELS: Record<PromiseStatus, string> = {
+	open: "open",
+	progressing: "progressing",
+	paid: "paid",
+	"paid-before-made": "paid before it was made",
+	"never-made": "never made",
+};
 
 export interface PromiseRef {
 	path: string;
