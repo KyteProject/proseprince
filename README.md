@@ -108,7 +108,22 @@ change: Ruoi talks of leaving
 
 With the cursor in a beat, **Create scene from beat** makes the next numbered scene file from your scene template (set in settings; a plain one is built in), fills `pov` from the chapter and `characters` from the beat's `who:` line, and adds the link under the beat. A beat with no link reads "not drafted"; a scene named after a beat attaches to it without a link; any other scene of the chapter is listed as not in the outline. In the chapter note itself, the outline's Beats section counts each beat's scenes instead of its own words.
 
-**In a scene**, the outline's Scene section shows its beat from the chapter note (the card, and words against the beat's target), so the plan sits beside the prose instead of above it, along with the promises the scene makes, moves on or pays.
+**A beat card can live with its scene** instead, so you can change it while you write the beat without switching notes. Put it under the scene's title, before the prose:
+
+```
+# Harbour
+%%Beat.
+target: 600
+who: Mara, Oskar
+change: she stops waiting
+%%
+
+Mara watched the ferry come in.
+```
+
+The chapter note then keeps just the heading and the link for that beat. A card in the scene file is used in place of one in the chapter note, for the beat's target, its `who:` and everywhere else a card is read; a beat whose scene has no card of its own (or that has no scene yet) still reads its card from the chapter note. If both hold one, the scene's is used and the outline says the chapter note has one too, so the two can't quietly drift apart. A card under one of the scene's own `##` beats stays that beat's note, as before. Nothing is moved for you: cut and paste it when you're ready.
+
+**In a scene**, the outline's Scene section shows its beat card (from the scene file or the chapter note) and words against the beat's target, so the plan sits beside the prose as you write, along with the promises the scene makes, moves on or pays.
 
 **Book.** Chapters in order; under each, its beats and their scenes. A scene row shows its words (against its `target`, or its beat's), the three passes (`dev`, `line`, `continuity` in the properties: filled once dated), and how many annotations are left to clear. Hover for the summary, who is in it and the breakdown; click to open it, Ctrl/Cmd-click for a new tab.
 
@@ -258,7 +273,7 @@ Source layout: `src/analysis` (masking, tagging, phrase matching, rules in `rule
 
 ## Roadmap
 
-Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18), the story view with chapter outlines, annotations and promises (0.19), reading a chapter or the book as one page (0.20), reveals, the cast and what a scene touches (0.21), scenes that need another look and the story inventory (0.22), who speaks in each scene (0.23), compiling a clean manuscript (0.24).
+Done since the first release: optional online word lookups (0.7–0.9), the Dialogue lens with conventions checks and voices (0.10–0.13), the outline sidebar (0.14–0.17), exercise mode (0.18), the story view with chapter outlines, annotations and promises (0.19), reading a chapter or the book as one page (0.20), reveals, the cast and what a scene touches (0.21), scenes that need another look and the story inventory (0.22), who speaks in each scene (0.23), compiling a clean manuscript (0.24), beat cards kept in their scene files (0.25).
 
 - Remaining Le Guin chapters: tense consistency (6), point of view and head-hopping (7–8; the frontmatter `pov` and the dialogue pronoun tracking are a start), telling markers (9), crowding map (10), sound (1; the lookup card's rhymes are a start).
 - More exercises (see `docs/exercise-mode-plan.md`): pure A/B dialogue, person and tense, points of view, cut it to half, beats added to bare dialogue.

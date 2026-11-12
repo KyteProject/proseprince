@@ -21,7 +21,7 @@ The approach is to cherry-pick ideas from other plugins and build them here agai
 | Promises | Three lists: `promises`, `progresses`, `pays` |
 | Promise rows | Jump to the scene; no paragraph pin |
 
-Assumed, not yet confirmed: while a scene file is open, its beat card is shown in the sidebar from the chapter note, and is not copied into the scene file. One copy, nothing to keep in step. A beat card that already sits in a scene file (chapters one to four today) is still read as it is now.
+Settled in 0.25.0 (11 November 2026): a beat card lives with its scene. The card is about the scene, and changing it while writing the beat meant switching to the chapter note. It is moved, not copied: one copy, nothing to keep in step. The scene file holds it as a `%%Beat.%%` comment under its title; the chapter note keeps the beat's heading and link. A scene's card is used in place of the chapter note's; a beat with no card in its scene (or no scene yet) reads the chapter note's, so chapters can move over one beat at a time. When both hold one, the scene's wins and the outline and Story view say so. The chapter's own `%%Card.%%` stays in the chapter note.
 
 ## What is picked, and from where
 
@@ -167,4 +167,4 @@ Snowflake's planning workspace, corkboard, timeline, freeform canvas and editabl
 
 ## Still open
 
-1. Beat card while drafting a scene: sidebar only (assumed), or also copied into the scene file?
+1. ~~Beat card while drafting a scene: sidebar only, or in the scene file?~~ Settled in 0.25.0: moved into the scene file (see above).

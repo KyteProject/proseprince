@@ -856,7 +856,7 @@ export default class ProsePrincePlugin extends Plugin {
 			...(knowledge ? { knowledge: { here: knowledge.here.length, before: knowledge.before, later: knowledge.later.map(fact), ahead: knowledge.ahead.map(fact), ...(knowledge.pov ? { pov: knowledge.pov } : {}) } } : {}),
 			...(note ? { chapter: { path: note.path, title: place.chapter.title } } : {}),
 			// Unset when the chapter has no outline; null when it has one and this scene isn't in it.
-			...(place?.beat ? { beat: { text: place.beat.text, card: place.beat.card, target: place.beat.target } } : place?.chapter.beats.length ? { beat: null } : {}),
+			...(place?.beat ? { beat: { text: place.beat.text, card: place.beat.card, target: place.beat.target, ...(place.beat.twoCards ? { twoCards: true } : {}) } } : place?.chapter.beats.length ? { beat: null } : {}),
 		};
 	}
 

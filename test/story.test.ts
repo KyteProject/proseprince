@@ -12,6 +12,7 @@ import {
 	readThrough,
 	sceneFileName,
 	scenePromises,
+	sceneCard,
 	sceneRecord,
 	SCENE_TEMPLATE,
 	toClear,
@@ -173,6 +174,45 @@ describe("cards", () => {
 		const scene = (name: string) => sceneRecord(`d/${name}.md`, name, "text\n", {})!;
 		const book = buildBook([sceneRecord("d/04.00 - The Job.md", "04.00 - The Job", swapped, {})!, scene("04.02 - Breakfast Bar"), scene("04.04 - The Lurch")]);
 		expect(book.chapters[0]!.outOfOrder).toBe(true);
+	});
+});
+
+describe("beat cards kept in scene files", () => {
+	const card = ["%%Beat.", "target: 600", "who: Mara, Oskar", "change: she stops waiting", "outline:", "\t1. the quay", "%%"];
+
+	it("reads the card under a scene's title", () => {
+		const doc = ["---", "type: draft", "---", "# Harbour", ...card, "", "Mara watched the ferry.", ""].join("\n");
+		expect(sceneCard(doc)).toEqual({ card: [["target", "600"], ["who", "Mara, Oskar"], ["change", "she stops waiting"]], target: 600, who: ["Mara", "Oskar"], change: "she stops waiting" });
+		expect(sceneRecord("d/02.01 - Harbour.md", "02.01 - Harbour", doc, {})!.card?.target).toBe(600);
+	});
+
+	it("leaves out cards under the note's own beats, and comments that aren't cards", () => {
+		const doc = ["# Harbour", "%% checked → [[Tides]] %%", "", "Prose.", "## On the quay", ...card, ""].join("\n");
+		expect(sceneCard(doc)).toBeNull();
+		expect(sceneCard(["Prose first.", ...card].join("\n"))?.target).toBe(600);
+		expect(sceneRecord("d/02.00 - Crossing.md", "02.00 - Crossing", ["# Crossing", ...card].join("\n"), {})!.card).toBeUndefined();
+	});
+
+	const chapter = ["# The Crossing", "## Harbour", "[[02.01 - Harbour]]", "## Ledger", "%%Beat.", "target: 300", "who: Pell", "%%", "[[02.02 - Ledger]]", "## Far Shore", "%%Beat.", "target: 200", "%%"].join("\n");
+	const scene = (name: string, body: string[]) => sceneRecord(`d/${name}.md`, name, [`# ${name.slice(5)}`, ...body, "", "word word word", ""].join("\n"), {})!;
+
+	it("uses the scene's card for its beat, and the chapter note's where the scene has none", () => {
+		const book = buildBook([
+			sceneRecord("d/02.00 - The Crossing.md", "02.00 - The Crossing", chapter, {})!,
+			scene("02.01 - Harbour", card),
+			scene("02.02 - Ledger", []),
+		]);
+		const [harbour, ledger, far] = book.chapters[0]!.beats;
+		expect([harbour!.target, harbour!.who, harbour!.change, harbour!.cardIn?.name.scene, harbour!.twoCards]).toEqual([600, ["Mara", "Oskar"], "she stops waiting", 1, undefined]);
+		expect([ledger!.target, ledger!.who, ledger!.cardIn]).toEqual([300, ["Pell"], undefined]);
+		expect([far!.target, far!.scenes.length]).toEqual([200, 0]);
+		expect(book.places.get("d/02.01 - Harbour.md")?.beat?.card[0]).toEqual(["target", "600"]);
+	});
+
+	it("prefers the scene's card when both hold one, and says so", () => {
+		const book = buildBook([sceneRecord("d/02.00 - The Crossing.md", "02.00 - The Crossing", chapter, {})!, scene("02.02 - Ledger", card)]);
+		const ledger = book.chapters[0]!.beats[1]!;
+		expect([ledger.target, ledger.who, ledger.twoCards]).toEqual([600, ["Mara", "Oskar"], true]);
 	});
 });
 

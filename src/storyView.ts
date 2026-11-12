@@ -192,7 +192,8 @@ export class StoryView extends ItemView {
 		head.createSpan({ cls: "pp-story-name", text: b.text });
 		head.createSpan({ cls: "pp-beat-words", text: !b.scenes.length ? (b.target ? `not drafted · ${num(b.target)}` : "not drafted") : b.target ? `${num(b.words)} / ${num(b.target)}` : num(b.words) });
 		if (!b.scenes.length) head.addClass("is-empty");
-		head.setAttribute("aria-label", b.card.map(([k, v]) => `${k}: ${v}`).join("\n") || "No card for this beat yet");
+		const from = b.cardIn ? [`Card kept in ${sceneLabel(b.cardIn)}${b.twoCards ? "; the chapter note has one too" : ""}`] : [];
+		head.setAttribute("aria-label", [...b.card.map(([k, v]) => `${k}: ${v}`), ...from].join("\n") || "No card for this beat yet");
 		if (c.note) this.linkTo(head, c.note.path);
 		// One scene carries the whole beat, so the beat's target is the scene's; with several, each keeps its own.
 		for (const s of b.scenes) this.scene(body, book, s, b.scenes.length === 1 ? b.target : undefined, true);

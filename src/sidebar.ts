@@ -54,7 +54,8 @@ export interface OutlineStory {
 	/** A scene's chapter note, when the chapter has one. */
 	chapter?: { path: string; title: string };
 	/** A scene's beat from the chapter note: null when the chapter has an outline and this scene isn't in it. */
-	beat?: { text: string; card: [string, string][]; target?: number } | null;
+	/** `twoCards`: the chapter note holds a card for this beat too, and this scene's is the one used. */
+	beat?: { text: string; card: [string, string][]; target?: number; twoCards?: boolean } | null;
 	promises: { role: "Makes" | "Progresses" | "Pays"; name: string; status: PromiseStatus }[];
 	/** Reasons its last pass may no longer hold, each with what to open. */
 	needs?: { text: string; path?: string; line?: number }[];
@@ -299,6 +300,12 @@ export class OutlineView extends ItemView {
 					grid.createDiv({ cls: "pp-outline-key", text: key });
 					grid.createDiv({ cls: "pp-outline-value", text: value.replace(/\[\[|\]\]/g, "") });
 				}
+			}
+			if (story.beat.twoCards && story.chapter) {
+				const note = body.createDiv({ cls: "pp-outline-note" });
+				note.createSpan({ text: "This note's card is used; " });
+				link(note.createSpan({ cls: "pp-story-ref", text: story.chapter.title || "the chapter note" }), story.chapter.path);
+				note.createSpan({ text: " has one for this beat too." });
 			}
 			const target = story.beat.target;
 			if (target && !(Number(ctx.frontmatter.target) > 0)) {

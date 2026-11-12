@@ -1,6 +1,6 @@
 import { excludedBlocks, type Range } from "./mask";
 import { maskInline } from "./mask";
-import { beatNotes, beatsOf, countLine, headingsIn, isProseLine } from "./outline";
+import { type BeatNotes, beatNotes, beatsOf, cardNotes, countLine, headingsIn, isProseLine } from "./outline";
 
 /**
  * The book, derived from the notes: chapters and scenes from file names, a chapter's beats from its
@@ -199,6 +199,24 @@ export function chapterOutline(doc: string): { title: string | null; card: [stri
 	};
 }
 
+/** A beat card kept in the scene's own file, with the target, change and who read from it. */
+export interface SceneCard extends BeatNotes {
+	card: [string, string][];
+}
+
+/**
+ * The beat card a scene file carries for itself: a `%%Beat.%%` comment under the note's title (or
+ * before its first heading when it has no title), and not under one of the note's own beats.
+ */
+export function sceneCard(doc: string): SceneCard | null {
+	const { title, beats } = beatsOf(headingsIn(doc, excludedBlocks(doc)));
+	const first = beats.reduce<number>((at, b) => Math.min(at, b.from), doc.length);
+	const from = title && title.from < first ? title.to : 0;
+	const card = cardIn(doc.slice(from, first), "beat");
+	if (!card.length) return null;
+	return { card, ...cardNotes(card.map(([k, v]) => `${k}: ${v}`).join("\n")) };
+}
+
 // ── Records ────────────────────────────────────────────────────────────────────
 
 export interface SceneRecord {
@@ -225,6 +243,8 @@ export interface SceneRecord {
 	unfiled: string[];
 	/** A chapter note's plan. */
 	outline?: ReturnType<typeof chapterOutline>;
+	/** A scene's own beat card, when it keeps one in its file. */
+	card?: SceneCard;
 }
 
 /** The lines of a note outside frontmatter, code, comments and callouts. */
@@ -271,6 +291,10 @@ export function sceneRecord(path: string, basename: string, text: string, frontm
 		filed: annotations.filter((a) => a.kind === "filed").flatMap((a) => a.links ?? []),
 		unfiled: annotations.filter((a) => a.kind === "note").map((a) => a.text).filter(Boolean),
 		...(kind === "chapter" ? { outline: chapterOutline(text) } : {}),
+		...(() => {
+			const card = kind === "scene" ? sceneCard(text) : null;
+			return card ? { card } : {};
+		})(),
 	};
 }
 
@@ -282,6 +306,10 @@ export interface BookBeat {
 	change?: string;
 	who?: string[];
 	card: [string, string][];
+	/** The scene file the card was read from, when it lives with its scene rather than in the chapter note. */
+	cardIn?: SceneRecord;
+	/** The chapter note holds a card for this beat as well, and the scene's is the one used. */
+	twoCards?: boolean;
 	scenes: SceneRecord[];
 	words: number;
 }
@@ -372,6 +400,14 @@ export function buildBook(records: readonly SceneRecord[]): Book {
 		// Links first: they survive renames. Then titles, for scenes named after their beat.
 		(note?.outline?.beats ?? []).forEach((b, i) => b.links.forEach((link) => claim(beats[i]!, byName.get(fold(link)))));
 		for (const beat of beats) for (const s of own) if (fold(s.name.title) === fold(beat.text)) claim(beat, s);
+		// A card kept with its scene wins over one in the chapter note: it is the one edited while writing.
+		for (const beat of beats) {
+			const holder = beat.scenes.find((s) => s.card);
+			if (!holder?.card) continue;
+			if (beat.card.length) beat.twoCards = true;
+			const { card, target, change, who } = holder.card;
+			Object.assign(beat, { card, target, change, who, cardIn: holder });
+		}
 		for (const beat of beats) beat.words = beat.scenes.reduce((n, s) => n + s.words, 0);
 		const listed = beats.flatMap((b) => b.scenes);
 		const chapter: BookChapter = {

@@ -92,21 +92,31 @@ export function beatNotes(doc: string, headings: readonly Heading[]): BeatNotes[
 		const section = doc.slice(h.to, next ? next.from : doc.length);
 		const notes: BeatNotes = {};
 		for (const m of section.matchAll(/%%([\s\S]*?)%%/g)) {
-			const target = /^[ \t]*target[ \t]*:[ \t]*"?([\d,.]+)"?[ \t]*$/im.exec(m[1]!);
-			const change = /^[ \t]*change[ \t]*:[ \t]*(\S.*?)[ \t]*$/im.exec(m[1]!);
-			const who = /^[ \t]*who[ \t]*:[ \t]*(\S.*?)[ \t]*$/im.exec(m[1]!);
-			if (who && notes.who === undefined) {
-				const people = who[1]!.split(/[,;]|\band\b/).map((w) => w.replace(/\[\[|\]\]/g, "").trim().replace(/[.]+$/, "").trim()).filter(Boolean);
-				if (people.length) notes.who = people;
-			}
-			if (target && notes.target === undefined) {
-				const n = Number(target[1]!.replace(/,/g, ""));
-				if (Number.isFinite(n) && n > 0) notes.target = n;
-			}
-			if (change && notes.change === undefined) notes.change = change[1];
+			const found = cardNotes(m[1]!);
+			if (notes.who === undefined && found.who) notes.who = found.who;
+			if (notes.target === undefined && found.target) notes.target = found.target;
+			if (notes.change === undefined && found.change) notes.change = found.change;
 		}
 		return notes;
 	});
+}
+
+/** The target, change and who lines of one card's text (the inside of a `%% … %%` comment). */
+export function cardNotes(block: string): BeatNotes {
+	const notes: BeatNotes = {};
+	const target = /^[ \t]*target[ \t]*:[ \t]*"?([\d,.]+)"?[ \t]*$/im.exec(block);
+	const change = /^[ \t]*change[ \t]*:[ \t]*(\S.*?)[ \t]*$/im.exec(block);
+	const who = /^[ \t]*who[ \t]*:[ \t]*(\S.*?)[ \t]*$/im.exec(block);
+	if (who) {
+		const people = who[1]!.split(/[,;]|\band\b/).map((w) => w.replace(/\[\[|\]\]/g, "").trim().replace(/[.]+$/, "").trim()).filter(Boolean);
+		if (people.length) notes.who = people;
+	}
+	if (target) {
+		const n = Number(target[1]!.replace(/,/g, ""));
+		if (Number.isFinite(n) && n > 0) notes.target = n;
+	}
+	if (change) notes.change = change[1];
+	return notes;
 }
 
 /** Index of the beat containing a document offset: the last beat starting at or before it, -1 before the first. */
